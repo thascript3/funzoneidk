@@ -1,3 +1,424 @@
+getgenv().InstanceACDebug = false
+
+-- AC Bypass
+local _stbl; _stbl = hookfunction(getrenv().setmetatable, newcclosure(function(tbl, mt)
+    if mt and typeof(mt) == "table" and rawget(mt, "__mode") == "kv" then
+        local tr = debug.traceback()
+        if tr:find("MiscellaneousController") then
+            return _stbl({1,2,3}, {})
+        end
+    end
+    return _stbl(tbl, mt)
+end))
+
+coroutine.wrap(function()
+    pcall(function()
+        local function _proc(o)
+            pcall(function()
+                if o:IsA("LocalScript") or o:IsA("ModuleScript") then
+                    local _s, nm = pcall(function() return o.Name:lower() end)
+                    if not _s or not nm then return end
+                    local _tags = {"Ban","Kick","Moderation"}
+                    for _i = 1, #_tags do
+                        if nm:find(_tags[_i]) then
+                            pcall(function() o.Disabled = true end)
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+        pcall(function()
+            local _desc = game:GetDescendants()
+            for _i = 1, #_desc do _proc(_desc[_i]) end
+        end)
+        pcall(function() game.DescendantAdded:Connect(_proc) end)
+    end)
+    pcall(function()
+        local _nc = game:GetService("NetworkClient")
+        if not _nc then return end
+        _nc.ChildAdded:Connect(function(ch)
+            pcall(function()
+                local _ok, _n = pcall(function() return ch.Name:lower() end)
+                if _ok and _n then
+                    if _n:find("anticheat") or _n:find("detection") then
+                        pcall(function() ch:Destroy() end)
+                    end
+                end
+            end)
+        end)
+    end)
+end)()
+
+local _Players = game:GetService("Players")
+local LocalPlayer = _Players.LocalPlayer
+
+local _fakeEv
+pcall(function()
+    _fakeEv = Instance.new("RemoteEvent")
+    _fakeEv.Name = "ClientAlert"
+    _fakeEv.Parent = LocalPlayer
+end)
+
+pcall(function()
+    local _rf = game:GetService("ReplicatedFirst")
+    local _tgt = _rf:WaitForChild("LocalScript3", 10)
+    local _ct = 0
+    local _gc = getgc(false)
+    for _i = 1, #_gc do
+        local _fn = _gc[_i]
+        if type(_fn) ~= "function" then continue end
+        local _ok1, _env = pcall(getfenv, _fn)
+        if not _ok1 or type(_env) ~= "table" then continue end
+        local _ok2, _scr = pcall(function() return rawget(_env, "script") end)
+        if not _ok2 or not _scr or typeof(_scr) ~= "Instance" then continue end
+        local _ok3, _ss = pcall(tostring, _scr)
+        if not _ok3 then continue end
+        if not (_scr == _tgt or (type(_ss) == "string" and _ss:find("LoadingScreen"))) then continue end
+        local _ok4, _consts = pcall(debug.getconstants, _fn)
+        if not _ok4 or type(_consts) ~= "table" then continue end
+        for _j = 1, #_consts do
+            local _c = _consts[_j]
+            if type(_c) == "string" and (_c:find("TakeTheL") or _c:find("Ban") or _c:find("Kick")) then
+                pcall(function()
+                    hookfunction(_fn, function() end)
+                    _ct += 1
+                end)
+                break
+            end
+        end
+    end
+end)
+task.wait(4)
+
+-- Skin changer hooks applied via Unlock All toggle
+do
+local skinState = {equipped={}, favorites={}, hooked=false, originals={}, mods={}, viewingProfile=nil, saveFile="onyx_skins_v2.json"}
+local function scClone(name, typ, opts)
+    local lib = skinState.mods.CosmeticLibrary
+    if not lib then return nil end
+    local base = lib.Cosmetics[name]
+    if not base then return nil end
+    local d = {}
+    for k,v in pairs(base) do d[k]=v end
+    d.Name=name
+    d.Type=d.Type or typ
+    d.Seed=d.Seed or math.random(1,1000000)
+    local el = skinState.mods.EnumLibrary
+    if el then
+        local ok,eid = pcall(el.ToEnum,el,name)
+        if ok and eid then d.Enum,d.ObjectID=eid,d.ObjectID or eid end
+    end
+    if opts then
+        if opts.inverted then d.Inverted=true end
+        if opts.color then d.Color=opts.color end
+    end
+    return d
+end
+
+local function scSave()
+    if not writefile or not makefolder then return end
+    pcall(function()
+        local cfg={equipped={},favorites=skinState.favorites}
+        for w,cs in pairs(skinState.equipped) do
+            cfg.equipped[w]={}
+            for ct,cd in pairs(cs) do
+                if cd and cd.Name then cfg.equipped[w][ct]={name=cd.Name,seed=cd.Seed,inverted=cd.Inverted} end
+            end
+        end
+        makefolder("unlockall")
+        writefile(skinState.saveFile, HttpService:JSONEncode(cfg))
+    end)
+end
+
+local function scLoad()
+    if not readfile or not isfile or not isfile(skinState.saveFile) then return end
+    pcall(function()
+        local cfg = HttpService:JSONDecode(readfile(skinState.saveFile))
+        if cfg.equipped then
+            for w,cs in pairs(cfg.equipped) do
+                skinState.equipped[w]={}
+                for ct,cd in pairs(cs) do
+                    local cl = scClone(cd.name,ct,{inverted=cd.inverted})
+                    if cl then cl.Seed=cd.seed skinState.equipped[w][ct]=cl end
+                end
+            end
+        end
+        skinState.favorites = cfg.favorites or {}
+    end)
+end
+
+local function scEquip(wname,ctype,ckey)
+    if not ckey or ckey=="" or ckey=="None" then
+        if skinState.equipped[wname] then
+            skinState.equipped[wname][ctype]=nil
+            if not next(skinState.equipped[wname]) then skinState.equipped[wname]=nil end
+        end
+    else
+        local cl = scClone(ckey,ctype)
+        if cl then
+            skinState.equipped[wname]=skinState.equipped[wname] or {}
+            skinState.equipped[wname][ctype]=cl
+        end
+    end
+    task.defer(function() pcall(function() if skinState.mods.DataController then skinState.mods.DataController.CurrentData:Replicate("WeaponInventory") end end) end)
+end
+
+local function scUnlockAll()
+    if skinState.hooked then return end
+    skinState.hooked=true
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    local p = Players.LocalPlayer
+    local ps = p.PlayerScripts
+    local ctrl = ps.Controllers
+    local el = require(ReplicatedStorage.Modules:WaitForChild("EnumLibrary",10))
+    if el then el:WaitForEnumBuilder() end
+    local cl = require(ReplicatedStorage.Modules:WaitForChild("CosmeticLibrary",10))
+    local il = require(ReplicatedStorage.Modules:WaitForChild("ItemLibrary",10))
+    local dc = require(ctrl:WaitForChild("PlayerDataController",10))
+    skinState.mods={EnumLibrary=el,CosmeticLibrary=cl,ItemLibrary=il,DataController=dc}
+
+    skinState.originals={
+        OwnsCosmetic=cl.OwnsCosmetic,
+        OwnsCosmeticNormally=cl.OwnsCosmeticNormally,
+        OwnsCosmeticUniversally=cl.OwnsCosmeticUniversally,
+        OwnsCosmeticForWeapon=cl.OwnsCosmeticForWeapon,
+        DCGet=dc.Get,
+        DCGetWeaponData=dc.GetWeaponData,
+    }
+
+    cl.OwnsCosmeticNormally=function() return true end
+    cl.OwnsCosmeticUniversally=function() return true end
+    cl.OwnsCosmeticForWeapon=function() return true end
+    local pO = cl.OwnsCosmetic
+    cl.OwnsCosmetic=function(self,inv,name,wep)
+        if name:find("MISSING_") then return pO(self,inv,name,wep) end
+        return true
+    end
+
+    local pG = dc.Get
+    dc.Get=function(self,key)
+        if key=="CosmeticInventory" then
+            return setmetatable({},{__index=function() return true end})
+        end
+        if key=="FavoritedCosmetics" then
+            local data=pG(self,key)
+            local r=data and table.clone(data) or {}
+            for w,f in pairs(skinState.favorites) do
+                r[w]=r[w] or {}
+                for n,isF in pairs(f) do r[w][n]=isF end
+            end
+            return r
+        end
+        return pG(self,key)
+    end
+
+    local pGW = dc.GetWeaponData
+    dc.GetWeaponData=function(self,wname)
+        local data=pGW(self,wname)
+        if not data then return nil end
+        local m={}
+        for k,v in pairs(data) do m[k]=v end
+        m.Name=wname
+        if skinState.equipped[wname] then
+            for ct,cd in pairs(skinState.equipped[wname]) do m[ct]=cd end
+        end
+        return m
+    end
+
+    if hookmetamethod then
+        local rem=ReplicatedStorage:FindFirstChild("Remotes")
+        local dr=rem and rem:FindFirstChild("Data")
+        local eqR=dr and dr:FindFirstChild("EquipCosmetic")
+        local fvR=dr and dr:FindFirstChild("FavoriteCosmetic")
+        if eqR then
+            local oldNC
+            oldNC=hookmetamethod(game,"__namecall",function(self,...)
+                if getnamecallmethod()~="FireServer" then return oldNC(self,...) end
+                local a={...}
+                if self==eqR and skinState.hooked then
+                    local wn,ct,cn=a[1],a[2],a[3]
+                    skinState.equipped[wn]=skinState.equipped[wn] or {}
+                    if not cn or cn=="None" or cn=="" then
+                        skinState.equipped[wn][ct]=nil
+                        if not next(skinState.equipped[wn]) then skinState.equipped[wn]=nil end
+                    else
+                        local c=scClone(cn,ct)
+                        if c then skinState.equipped[wn][ct]=c end
+                    end
+                    task.defer(function() pcall(function() dc.CurrentData:Replicate("WeaponInventory") end) end)
+                    return
+                end
+                if self==fvR and skinState.hooked then
+                    skinState.favorites[a[1]]=skinState.favorites[a[1]] or {}
+                    skinState.favorites[a[1]][a[2]]=a[3] or nil
+                    return
+                end
+                return oldNC(self,...)
+            end)
+        end
+    end
+
+    local CI
+    pcall(function() CI=require(ps.Modules.ClientReplicatedClasses.ClientFighter.ClientItem) end)
+    if CI and CI._CreateViewModel then
+        local oCVM=CI._CreateViewModel
+        CI._CreateViewModel=function(self,ref)
+            local wn=self.Name
+            local wp=self.ClientFighter and self.ClientFighter.Player
+            if wp==p and skinState.equipped[wn] and ref and ref.Data then
+                for ct,cd in pairs(skinState.equipped[wn]) do ref.Data[ct]=cd end
+            end
+            return oCVM(self,ref)
+        end
+    end
+
+    local origGVMI=il.GetViewModelImageFromWeaponData
+    il.GetViewModelImageFromWeaponData=function(self,wd,hr)
+        if not wd then return origGVMI(self,wd,hr) end
+        local wn=wd.Name
+        local show=(wd.Skin and skinState.equipped[wn] and wd.Skin==skinState.equipped[wn].Skin)
+        if show and skinState.equipped[wn] and skinState.equipped[wn].Skin then
+            local si=self.ViewModels[skinState.equipped[wn].Skin.Name]
+            if si then return si[hr and "ImageHighResolution" or "Image"] or si.Image end
+        end
+        return origGVMI(self,wd,hr)
+    end
+
+    local vmPath=ps:FindFirstChild("ClientReplicatedClasses")
+    vmPath=vmPath and vmPath:FindFirstChild("ClientFighter")
+    vmPath=vmPath and vmPath:FindFirstChild("ClientViewModel")
+    vmPath=vmPath and vmPath:FindFirstChild("ClientViewModel")
+    vmPath=vmPath and vmPath.Parent
+    if vmPath then
+        local CVM=require(vmPath)
+        if CVM.GetCharm then
+            local oGC=CVM.GetCharm
+            CVM.GetCharm=function(self)
+                local wn=self.ClientItem and self.ClientItem.Name
+                local wp=self.ClientItem and self.ClientItem.ClientFighter and self.ClientItem.ClientFighter.Player
+                if wn and wp==p and skinState.equipped[wn] and skinState.equipped[wn].Charm then
+                    return skinState.equipped[wn].Charm
+                end
+                return oGC(self)
+            end
+        end
+        local oNew=CVM.new
+        CVM.new=function(rd,ci)
+            local wp=ci.ClientFighter and ci.ClientFighter.Player
+            local wn=ci.Name
+            if wp==p and skinState.equipped[wn] then
+                local RC=require(ReplicatedStorage.Modules.ReplicatedClass)
+                local dk=RC:ToEnum("Data")
+                rd[dk]=rd[dk] or {}
+                for ct,cd in pairs(skinState.equipped[wn]) do
+                    rd[dk][RC:ToEnum(ct)]=cd
+                end
+            end
+            return oNew(rd,ci)
+        end
+    end
+
+    local EC
+    pcall(function() EC=require(ctrl:WaitForChild("EmoteController",10)) end)
+    if EC and EC.GetEmotes then
+        local oGE=EC.GetEmotes
+        EC.GetEmotes=function(self)
+            local em=oGE(self)
+            for n,c in pairs(cl.Cosmetics) do
+                if c and (c.Type=="Dance" or c.Type=="Emote" or n:lower():find("dance") or n:lower():find("emote")) then
+                    if not em[n] then em[n]=c end
+                end
+            end
+            return em
+        end
+    end
+
+    pcall(function()
+        local VP=require(p.PlayerScripts.Modules.Pages.ViewProfile)
+        if VP and VP.Fetch then
+            local oF=VP.Fetch
+            VP.Fetch=function(self,tp)
+                skinState.viewingProfile=tp
+                return oF(self,tp)
+            end
+        end
+    end)
+
+    scLoad()
+end
+
+local function scLockAll()
+    if not skinState.hooked then return end
+    skinState.hooked=false
+    local cl=skinState.mods.CosmeticLibrary
+    local dc=skinState.mods.DataController
+    if cl then
+        pcall(function() cl.OwnsCosmetic=skinState.originals.OwnsCosmetic end)
+        pcall(function() cl.OwnsCosmeticNormally=skinState.originals.OwnsCosmeticNormally end)
+        pcall(function() cl.OwnsCosmeticUniversally=skinState.originals.OwnsCosmeticUniversally end)
+        pcall(function() cl.OwnsCosmeticForWeapon=skinState.originals.OwnsCosmeticForWeapon end)
+    end
+    if dc then
+        pcall(function() dc.Get=skinState.originals.DCGet end)
+        pcall(function() dc.GetWeaponData=skinState.originals.DCGetWeaponData end)
+    end
+    for k in pairs(skinState.equipped) do skinState.equipped[k]=nil end
+    for k in pairs(skinState.favorites) do skinState.favorites[k]=nil end
+end
+
+getgenv()._SC = {skinState=skinState, scUnlockAll=scUnlockAll, scLockAll=scLockAll, scEquip=scEquip, scSave=scSave, scLoad=scLoad}
+end
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function acLog(reason)
+    if getgenv().InstanceACDebug then
+        warn("[AC DETECTED] " .. reason)
+    end
+end
+
+LocalPlayer.AncestryChanged:Connect(function(_, parent)
+    if not parent then acLog("ancestry changed / removed") end
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    if plr == LocalPlayer then acLog("player removing") end
+end)
+
+game:GetService("RunService").Heartbeat:Connect(function()
+    if not LocalPlayer.Parent then
+        acLog("localplayer parent nil")
+    elseif not LocalPlayer.Character then
+        acLog("localplayer character nil")
+    elseif game:GetService("CoreGui"):FindFirstChild("RobloxKickScreen") then
+        acLog("kickscreen detected")
+    end
+end)
+
+pcall(function()
+    game:GetService("GuiService").ErrorMessageChanged:Connect(function(msg)
+        if msg and (msg:lower():find("kick") or msg:lower():find("ban")) then
+            acLog("gui error message: " .. msg)
+        end
+    end)
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+        if not LocalPlayer or not LocalPlayer.Parent then
+            acLog("localplayer nil in poll")
+            break
+        end
+    end
+end)
+
+print("LOADED ALPHA INSTANCE ACB ")
+
 local function instanceShowLoadingNotification()
     local RunService = game:GetService("RunService")
     local guiParent = (gethui and gethui()) or game:GetService("CoreGui")
@@ -66,11 +487,11 @@ local function instancePreloadCoreModules()
     local localPlayer = players.LocalPlayer or players.PlayerAdded:Wait()
     local playerScripts = localPlayer:WaitForChild("PlayerScripts", 8)
     local modulesFolder = replicatedStorage:WaitForChild("Modules", 8)
-    pcall(function() instanceSafeRequire(modulesFolder:WaitForChild("EnumLibrary", 4)) end)
-    pcall(function() instanceSafeRequire(modulesFolder:WaitForChild("Utility", 4)) end)
+    task.spawn(function() pcall(function() instanceSafeRequire(modulesFolder:WaitForChild("EnumLibrary", 4)) end) end)
+    task.spawn(function() pcall(function() instanceSafeRequire(modulesFolder:WaitForChild("Utility", 4)) end) end)
     local controllers = playerScripts:WaitForChild("Controllers", 8)
-    pcall(function() instanceSafeRequire(controllers:WaitForChild("FighterController", 4)) end)
-    pcall(function() instanceSafeRequire(controllers:WaitForChild("CameraController", 4)) end)
+    task.spawn(function() pcall(function() instanceSafeRequire(controllers:WaitForChild("FighterController", 4)) end) end)
+    task.spawn(function() pcall(function() instanceSafeRequire(controllers:WaitForChild("CameraController", 4)) end) end)
 end
 
 local function instanceHideErrorPromptsStep()
@@ -79,7 +500,7 @@ local function instanceHideErrorPromptsStep()
     if robloxGui then
         local errorPrompt = robloxGui:FindFirstChild("ErrorPrompt")
         if errorPrompt and errorPrompt:IsA("GuiObject") then
-            errorPrompt.Visible = false
+            pcall(function() errorPrompt.Visible = false end)
         end
     end
     local promptGui = coreGui:FindFirstChild("RobloxPromptGui")
@@ -95,8 +516,6 @@ local function instanceRunLoadingBootstrap()
     local hideConn = runService.RenderStepped:Connect(function()
         if hideErrors then instanceHideErrorPromptsStep() end
     end)
-
-    task.wait(0.8)
 
     pcall(instancePreloadCoreModules)
 
@@ -173,5187 +592,58 @@ if not getgenv().InstanceSliderFillBound then
     end)
 end
 
-local function loadInstanceLibrary()
-    local cacheKey = "InstanceLibrary_Cached_Patched"
-    if getgenv()[cacheKey] then return getgenv()[cacheKey]() end
-    local rawSrc
-    if isfile and isfile("InstanceLibrary_Patched.lua") then
-        rawSrc = readfile("InstanceLibrary_Patched.lua")
-        if rawSrc:find("200, 149, 108", 1, true) or rawSrc:find("200, 149, 106", 1, true) then
-            rawSrc = nil
-        end
-    end
-    if not rawSrc then
-        if isfile and isfile("InstanceLibrary_Patched.lua") then
-            pcall(delfile, "InstanceLibrary_Patched.lua")
-        end
-        rawSrc = [==[local qwe;qwe=hookfunction(getrenv().setmetatable,newcclosure(function(Table,Metatable)
-    if type(Metatable)=="table" and rawget(Metatable,"__mode")=="kv" then
-        local ok,src=pcall(debug.info,2,"s")
-        if ok and src and src:find("MiscellaneousController") then
-            return qwe({1,2,3},{})
-        end
-    end
-    return qwe(Table,Metatable)
-end))
-
-local InputService = game:GetService('UserInputService');
-local TextService = game:GetService('TextService');
-local CoreGui = game:GetService('CoreGui');
-local Teams = game:GetService('Teams');
-local Players = game:GetService('Players');
-local RunService = game:GetService('RunService')
-local TweenService = game:GetService('TweenService');
-local HttpService = game:GetService('HttpService');
-local RenderStepped = RunService.RenderStepped;
-local LocalPlayer = Players.LocalPlayer;
-local Mouse = (cloneref or function(...) return ... end)(LocalPlayer:GetMouse());
-
-local CustomFont
-pcall(function()
-    if not (isfile and writefile and getcustomasset and delfile) then
-        return
-    end
-    local fontid = "roboto_font.ttf"
-    if not isfile(fontid) then
-        writefile(fontid, game:HttpGet("https://github.com/nymus573l/esp-fonts/raw/refs/heads/main/Roboto-VariableFont_wdth,wght.ttf"))
-    end
-    if isfile("roboto_font.font") then
-        delfile("roboto_font.font")
-    end
-    local fontdata = {
-        name = "RobotoFont",
-        faces = {{ name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(fontid) }},
-    }
-    writefile("roboto_font.font", HttpService:JSONEncode(fontdata))
-    CustomFont = Font.new(getcustomasset("roboto_font.font"))
-end)
-
-local ProtectGui = protectgui or (syn and syn.protect_gui) or (function() end);
-
-local ScreenGui = Instance.new('ScreenGui');
-ProtectGui(ScreenGui);
-
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;
-ScreenGui.DisplayOrder = 2147483646;
-ScreenGui.IgnoreGuiInset = true;
-ScreenGui.Parent = CoreGui;
-
-local Toggles = {};
-local Options = {};
-
-getgenv().Toggles = Toggles;
-getgenv().Options = Options;
-
-local Library = {
-    Registry = {};
-    RegistryMap = {};
-
-    HudRegistry = {};
-
-    FontColor = Color3.fromRGB(255, 255, 255);
-    MainColor = Color3.fromRGB(28, 28, 28);
-    BackgroundColor = Color3.fromRGB(20, 20, 20);
-    AccentColor = Color3.fromRGB(0, 200, 255);
-    OutlineColor = Color3.fromRGB(50, 50, 50);
-    RiskColor = Color3.fromRGB(255, 50, 50),
-
-    Black = Color3.new(0, 0, 0);
-    Font = CustomFont or Enum.Font.Roboto,
-
-    OpenedFrames = {};
-    DependencyBoxes = {};
-
-    Signals = {};
-    ScreenGui = ScreenGui;
-};
-
-
-
-local function GetPlayersString()
-    local PlayerList = Players:GetPlayers();
-
-    for i = 1, #PlayerList do
-        PlayerList[i] = PlayerList[i].Name;
-    end;
-
-    table.sort(PlayerList, function(str1, str2) return str1 < str2 end);
-
-    return PlayerList;
-end;
-
-local function GetTeamsString()
-    local TeamList = Teams:GetTeams();
-
-    for i = 1, #TeamList do
-        TeamList[i] = TeamList[i].Name;
-    end;
-
-    table.sort(TeamList, function(str1, str2) return str1 < str2 end);
-    
-    return TeamList;
-end;
-
-function Library:SafeCallback(f, ...)
-    if (not f) then
-        return;
-    end;
-
-    if not Library.NotifyOnError then
-        return f(...);
-    end;
-
-    local success, event = pcall(f, ...);
-
-    if not success then
-        local _, i = event:find(":%d+: ");
-
-        if not i then
-            return Library:Notify(event);
-        end;
-
-        return Library:Notify(event:sub(i + 1), 3);
-    end;
-end;
-
-function Library:AttemptSave()
-    if Library.SaveManager then
-        Library.SaveManager:Save();
-    end;
-end;
-
-function Library:Create(Class, Properties)
-    local _Instance = Class;
-
-    if type(Class) == 'string' then
-        _Instance = Instance.new(Class);
-    end;
-
-    for Property, Value in next, Properties do
-        if Property == 'Font' then
-            if typeof(Value) == 'Font' then
-                _Instance.FontFace = Value;
-            elseif typeof(Value) == 'EnumItem' then
-                _Instance.Font = Value;
-            end
-        else
-            _Instance[Property] = Value;
-        end;
-    end;
-
-    return _Instance;
-end;
-
-function Library:ApplyTextStroke(Inst)
-    Inst.TextStrokeTransparency = 1;
-
-    Library:Create('UIStroke', {
-        Color = Color3.new(0, 0, 0);
-        Thickness = 1;
-        LineJoinMode = Enum.LineJoinMode.Miter;
-        Parent = Inst;
-    });
-end;
-
-function Library:CreateLabel(Properties, IsHud)
-    local _Instance = Library:Create('TextLabel', {
-        BackgroundTransparency = 1;
-        Font = Library.Font;
-        TextColor3 = Library.FontColor;
-        TextSize = 16;
-        TextStrokeTransparency = 0;
-    });
-
-    Library:ApplyTextStroke(_Instance);
-
-    Library:AddToRegistry(_Instance, {
-        TextColor3 = 'FontColor';
-    }, IsHud);
-
-    return Library:Create(_Instance, Properties);
-end;
-
-function Library:MakeDraggable(Instance, Cutoff)
-    Instance.Active = true;
-
-local DragPreview = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
-        BackgroundTransparency = 0.75;
-        BorderColor3 = Library.AccentColor;
-        BorderSizePixel = 2;
-        Size = Instance.Size;
-        Position = Instance.Position;
-        AnchorPoint = Instance.AnchorPoint;
-        Visible = false;
-        ZIndex = 1000;
-        Parent = ScreenGui;
-    });
-
-    Library:AddToRegistry(DragPreview, {
-        BackgroundColor3 = 'AccentColor';
-        BorderColor3 = 'AccentColor';
-    });
-
-    Instance.InputBegan:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local ObjPos = Vector2.new(
-                Mouse.X - Instance.AbsolutePosition.X,
-                Mouse.Y - Instance.AbsolutePosition.Y
-            );
-
-            if ObjPos.Y > (Cutoff or 40) then
-                return;
-            end;
-
-DragPreview.Size = Instance.Size;
-            DragPreview.Position = Instance.Position;
-            DragPreview.AnchorPoint = Instance.AnchorPoint;
-            DragPreview.Visible = true;
-
-            while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                DragPreview.Position = UDim2.new(
-                    0,
-                    Mouse.X - ObjPos.X + (Instance.Size.X.Offset * Instance.AnchorPoint.X),
-                    0,
-                    Mouse.Y - ObjPos.Y + (Instance.Size.Y.Offset * Instance.AnchorPoint.Y)
-                );
-
-                RenderStepped:Wait();
-            end;
-
-Instance.Position = DragPreview.Position;
-            DragPreview.Visible = false;
-        end;
-    end)
-end;
-
-function Library:AddToolTip(InfoStr, HoverInstance)
-    local X, Y = Library:GetTextBounds(InfoStr, Library.Font, 14);
-    local Tooltip = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor,
-        BorderColor3 = Library.OutlineColor,
-
-        Size = UDim2.fromOffset(X + 5, Y + 4),
-        ZIndex = 100,
-        Parent = Library.ScreenGui,
-
-        Visible = false,
-    })
-
-    local Label = Library:CreateLabel({
-        Position = UDim2.fromOffset(3, 1),
-        Size = UDim2.fromOffset(X, Y);
-        TextSize = 14;
-        Text = InfoStr,
-        TextColor3 = Library.FontColor,
-        TextXAlignment = Enum.TextXAlignment.Left;
-        ZIndex = Tooltip.ZIndex + 1,
-
-        Parent = Tooltip;
-    });
-
-    Library:AddToRegistry(Tooltip, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    });
-
-    Library:AddToRegistry(Label, {
-        TextColor3 = 'FontColor',
-    });
-
-    local IsHovering = false
-
-    HoverInstance.MouseEnter:Connect(function()
-        if Library:MouseIsOverOpenedFrame() then
-            return
-        end
-
-        IsHovering = true
-
-        Tooltip.Position = UDim2.fromOffset(Mouse.X + 15, Mouse.Y + 12)
-        Tooltip.Visible = true
-
-        while IsHovering do
-            RunService.Heartbeat:Wait()
-            Tooltip.Position = UDim2.fromOffset(Mouse.X + 15, Mouse.Y + 12)
-        end
-    end)
-
-    HoverInstance.MouseLeave:Connect(function()
-        IsHovering = false
-        Tooltip.Visible = false
-    end)
-end
-
-function Library:OnHighlight(HighlightInstance, Instance, Properties, PropertiesDefault)
-    HighlightInstance.MouseEnter:Connect(function()
-        local Reg = Library.RegistryMap[Instance];
-
-        for Property, ColorIdx in next, Properties do
-            local TargetValue = Library[ColorIdx] or ColorIdx;
-            
-            TweenService:Create(Instance, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                [Property] = TargetValue
-            }):Play();
-
-            if Reg and Reg.Properties[Property] then
-                Reg.Properties[Property] = ColorIdx;
-            end;
-        end;
-    end)
-
-    HighlightInstance.MouseLeave:Connect(function()
-        local Reg = Library.RegistryMap[Instance];
-
-        for Property, ColorIdx in next, PropertiesDefault do
-            local TargetValue = Library[ColorIdx] or ColorIdx;
-            
-            TweenService:Create(Instance, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                [Property] = TargetValue
-            }):Play();
-
-            if Reg and Reg.Properties[Property] then
-                Reg.Properties[Property] = ColorIdx;
-            end;
-        end;
-    end)
-end;
-
-function Library:MouseIsOverOpenedFrame()
-    for Frame, _ in next, Library.OpenedFrames do
-        local AbsPos, AbsSize = Frame.AbsolutePosition, Frame.AbsoluteSize;
-
-        if Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X
-            and Mouse.Y >= AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y then
-
-            return true;
-        end;
-    end;
-end;
-
-function Library:IsMouseOverFrame(Frame)
-    local AbsPos, AbsSize = Frame.AbsolutePosition, Frame.AbsoluteSize;
-
-    if Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X
-        and Mouse.Y >= AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y then
-
-        return true;
-    end;
-end;
-
-function Library:UpdateDependencyBoxes()
-    for _, Depbox in next, Library.DependencyBoxes do
-        Depbox:Update();
-    end;
-end;
-
-function Library:MapValue(Value, MinA, MaxA, MinB, MaxB)
-    return (1 - ((Value - MinA) / (MaxA - MinA))) * MinB + ((Value - MinA) / (MaxA - MinA)) * MaxB;
-end;
-
-function Library:GetTextBounds(Text, Font, Size, Resolution)
-    local checkFont = Font;
-    if typeof(Font) == 'Font' then
-        checkFont = Enum.Font.Roboto;
-    end
-    local Bounds = TextService:GetTextSize(Text, Size, checkFont, Resolution or Vector2.new(1920, 1080))
-    return Bounds.X, Bounds.Y
-end;
-
-function Library:GetDarkerColor(Color)
-    local H, S, V = Color3.toHSV(Color);
-    return Color3.fromHSV(H, S, V / 1.5);
-end;
-Library.AccentColorDark = Library:GetDarkerColor(Library.AccentColor);
-
-function Library:AddToRegistry(Instance, Properties, IsHud)
-    local Idx = #Library.Registry + 1;
-    local Data = {
-        Instance = Instance;
-        Properties = Properties;
-        Idx = Idx;
-    };
-
-    table.insert(Library.Registry, Data);
-    Library.RegistryMap[Instance] = Data;
-
-    if IsHud then
-        table.insert(Library.HudRegistry, Data);
-    end;
-end;
-
-function Library:RemoveFromRegistry(Instance)
-    local Data = Library.RegistryMap[Instance];
-
-    if Data then
-        for Idx = #Library.Registry, 1, -1 do
-            if Library.Registry[Idx] == Data then
-                table.remove(Library.Registry, Idx);
-            end;
-        end;
-
-        for Idx = #Library.HudRegistry, 1, -1 do
-            if Library.HudRegistry[Idx] == Data then
-                table.remove(Library.HudRegistry, Idx);
-            end;
-        end;
-
-        Library.RegistryMap[Instance] = nil;
-    end;
-end;
-
-function Library:UpdateColorsUsingRegistry()
-    for Idx, Object in next, Library.Registry do
-        for Property, ColorIdx in next, Object.Properties do
-            if type(ColorIdx) == 'string' then
-                Object.Instance[Property] = Library[ColorIdx];
-            elseif type(ColorIdx) == 'function' then
-                Object.Instance[Property] = ColorIdx()
-            end
-        end;
-    end;
-
-    for _, Toggle in next, Toggles do
-        if Toggle.Value and Toggle.Display then
-            Toggle:Display();
-        end;
-    end;
-end;
-
-
-
-function Library:GiveSignal(Signal)
-    -- Only used for signals not attached to library instances, as those should be cleaned up on object destruction by Roblox
-    table.insert(Library.Signals, Signal)
-end
-
-function Library:Unload()
-    -- Unload all of the signals
-    for Idx = #Library.Signals, 1, -1 do
-        local Connection = table.remove(Library.Signals, Idx)
-        Connection:Disconnect()
-    end
-
-     -- Call our unload callback, maybe to undo some hooks etc
-    if Library.OnUnload then
-        Library.OnUnload()
-    end
-
-    ScreenGui:Destroy()
-end
-
-function Library:OnUnload(Callback)
-    Library.OnUnload = Callback
-end
-
-Library:GiveSignal(ScreenGui.DescendantRemoving:Connect(function(Instance)
-    if Library.RegistryMap[Instance] then
-        Library:RemoveFromRegistry(Instance);
-    end;
-end))
-
-local BaseAddons = {};
-
-do
-    local Funcs = {};
-
-    function Funcs:AddColorPicker(Idx, Info)
-        local ToggleLabel = self.TextLabel;
-        -- local Container = self.Container;
-
-        assert(Info.Default, 'AddColorPicker: Missing default value.');
-
-        local ColorPicker = {
-            Value = Info.Default;
-            Transparency = Info.Transparency or 0;
-            Type = 'ColorPicker';
-            Title = type(Info.Title) == 'string' and Info.Title or 'Color picker',
-            Callback = Info.Callback or function(Color) end;
-        };
-
-        function ColorPicker:SetHSVFromRGB(Color)
-            local H, S, V = Color3.toHSV(Color);
-
-            ColorPicker.Hue = H;
-            ColorPicker.Sat = S;
-            ColorPicker.Vib = V;
-        end;
-
-        ColorPicker:SetHSVFromRGB(ColorPicker.Value);
-
-local DisplayFrame = Library:Create('Frame', {
-    BackgroundColor3 = Color3.new(0, 0, 0);
-    BorderColor3 = Library.OutlineColor;
-    Size = UDim2.new(0, 28, 0, 14);
-    ZIndex = 9;
-    Parent = ToggleLabel;
-});
-
-Library:AddToRegistry(DisplayFrame, {
-            BorderColor3 = 'OutlineColor';
-        });
-
-        Library:OnHighlight(DisplayFrame, DisplayFrame,
-            { BorderColor3 = 'AccentColor' },
-            { BorderColor3 = 'OutlineColor' }
-        );
-
-local DisplayInner = Library:Create('Frame', {
-    BackgroundColor3 = ColorPicker.Value;
-    BorderSizePixel = 0;
-    Position = UDim2.fromOffset(1, 1);
-    Size = UDim2.new(1, -2, 1, -2);
-    ZIndex = 10;
-    Parent = DisplayFrame;
-});
-
-        -- Transparency checker pattern behind color display
-        local CheckerFrame = Library:Create('ImageLabel', {
-            BorderSizePixel = 0;
-            Size = UDim2.new(1, -2, 1, -2);
-            Position = UDim2.fromOffset(1, 1);
-            ZIndex = 9;
-            Image = 'http://www.roblox.com/asset/?id=12977615774';
-            Visible = true;
-            Parent = DisplayFrame;
-        });
-
-        -- 1/16/23
-        -- Rewrote this to be placed inside the Library ScreenGui
-        -- There was some issue which caused RelativeOffset to be way off
-        -- Thus the color picker would never show
-
-        local PickerFrameOuter = Library:Create('Frame', {
-            Name = 'Color';
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.fromOffset(DisplayFrame.AbsolutePosition.X, DisplayFrame.AbsolutePosition.Y + 18),
-            Size = UDim2.fromOffset(230, 280);
-            Visible = false;
-            ZIndex = 15;
-            Parent = ScreenGui,
-        });
-
-        DisplayFrame:GetPropertyChangedSignal('AbsolutePosition'):Connect(function()
-            if PickerFrameOuter.Visible then
-                PickerFrameOuter.Position = UDim2.fromOffset(DisplayFrame.AbsolutePosition.X, DisplayFrame.AbsolutePosition.Y + 18);
-            end
-        end)
-
-        local PickerFrameInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 16;
-            Parent = PickerFrameOuter;
-        });
-
-        local Highlight = Library:Create('Frame', {
-            BackgroundColor3 = Library.AccentColor;
-            BorderSizePixel = 0;
-            Size = UDim2.new(1, 0, 0, 2);
-            ZIndex = 17;
-            Parent = PickerFrameInner;
-        });
-
-        local SatVibMapOuter = Library:Create('Frame', {
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.new(0, 4, 0, 25);
-            Size = UDim2.new(0, 200, 0, 200);
-            ZIndex = 17;
-            Parent = PickerFrameInner;
-        });
-
-        local SatVibMapInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 18;
-            Parent = SatVibMapOuter;
-        });
-
-        local SatVibMap = Library:Create('ImageLabel', {
-            BorderSizePixel = 0;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 18;
-            Image = 'rbxassetid://4155801252';
-            Parent = SatVibMapInner;
-        });
-
-        local CursorOuter = Library:Create('ImageLabel', {
-            AnchorPoint = Vector2.new(0.5, 0.5);
-            Size = UDim2.new(0, 6, 0, 6);
-            BackgroundTransparency = 1;
-            Image = 'http://www.roblox.com/asset/?id=9619665977';
-            ImageColor3 = Color3.new(0, 0, 0);
-            ZIndex = 19;
-            Parent = SatVibMap;
-        });
-
-        local CursorInner = Library:Create('ImageLabel', {
-            Size = UDim2.new(0, CursorOuter.Size.X.Offset - 2, 0, CursorOuter.Size.Y.Offset - 2);
-            Position = UDim2.new(0, 1, 0, 1);
-            BackgroundTransparency = 1;
-            Image = 'http://www.roblox.com/asset/?id=9619665977';
-            ZIndex = 20;
-            Parent = CursorOuter;
-        })
-
-        local HueSelectorOuter = Library:Create('Frame', {
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.new(0, 208, 0, 25);
-            Size = UDim2.new(0, 15, 0, 200);
-            ZIndex = 17;
-            Parent = PickerFrameInner;
-        });
-
-        local HueSelectorInner = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(1, 1, 1);
-            BorderSizePixel = 0;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 18;
-            Parent = HueSelectorOuter;
-        });
-
-        local HueCursor = Library:Create('Frame', { 
-            BackgroundColor3 = Color3.new(1, 1, 1);
-            AnchorPoint = Vector2.new(0, 0.5);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(1, 0, 0, 1);
-            ZIndex = 18;
-            Parent = HueSelectorInner;
-        });
-
-        local HueBoxOuter = Library:Create('Frame', {
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.fromOffset(4, 248),
-            Size = UDim2.new(0.5, -6, 0, 20),
-            ZIndex = 18,
-            Parent = PickerFrameInner;
-        });
-
-        local HueBoxInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 18,
-            Parent = HueBoxOuter;
-        });
-
-        Library:Create('UIGradient', {
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(212, 212, 212))
-            });
-            Rotation = 90;
-            Parent = HueBoxInner;
-        });
-
-        local HueBox = Library:Create('TextBox', {
-            BackgroundTransparency = 1;
-            Position = UDim2.new(0, 5, 0, 0);
-            Size = UDim2.new(1, -5, 1, 0);
-            Font = Library.Font;
-            PlaceholderColor3 = Color3.fromRGB(190, 190, 190);
-            PlaceholderText = 'Hex color',
-            Text = '#FFFFFF',
-            TextColor3 = Library.FontColor;
-            TextSize = 14;
-            TextStrokeTransparency = 0;
-            TextXAlignment = Enum.TextXAlignment.Left;
-            ZIndex = 20,
-            Parent = HueBoxInner;
-        });
-
-        Library:ApplyTextStroke(HueBox);
-
-        local RgbBoxBase = Library:Create(HueBoxOuter:Clone(), {
-            Position = UDim2.new(0.5, 2, 0, 248),
-            Size = UDim2.new(0.5, -6, 0, 20),
-            Parent = PickerFrameInner
-        });
-
-        local RgbBox = Library:Create(RgbBoxBase.Frame:FindFirstChild('TextBox'), {
-            Text = '255, 255, 255',
-            PlaceholderText = 'RGB color',
-            TextColor3 = Library.FontColor
-        });
-
-        -- RGB Sliders
-local SliderContainer = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.fromOffset(4, Info.Transparency and 228 or 210);
-    Size = UDim2.new(1, -8, 0, 60);
-    ZIndex = 18;
-    Visible = false; -- Toggle this for advanced mode
-    Parent = PickerFrameInner;
-});
-
-local function CreateRGBSlider(Name, YPos, ColorChannel)
-    local SliderLabel = Library:CreateLabel({
-        Position = UDim2.fromOffset(0, YPos);
-        Size = UDim2.new(0, 15, 0, 15);
-        Text = Name;
-        TextSize = 12;
-        ZIndex = 19;
-        Parent = SliderContainer;
-    });
-
-    local SliderOuter = Library:Create('Frame', {
-        BackgroundColor3 = Color3.new(0, 0, 0);
-        BorderColor3 = Color3.new(0, 0, 0);
-        Position = UDim2.fromOffset(20, YPos);
-        Size = UDim2.new(1, -50, 0, 15);
-        ZIndex = 19;
-        Parent = SliderContainer;
-    });
-
-    local SliderInner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        BorderMode = Enum.BorderMode.Inset;
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 20;
-        Parent = SliderOuter;
-    });
-
-    Library:AddToRegistry(SliderInner, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    });
-
-    local SliderFill = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
-        BorderSizePixel = 0;
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 21;
-        Parent = SliderInner;
-    });
-
-    Library:AddToRegistry(SliderFill, {
-        BackgroundColor3 = 'AccentColor';
-    });
-
-    local ValueLabel = Library:CreateLabel({
-        Position = UDim2.new(1, 5, 0, 0);
-        Size = UDim2.new(0, 25, 0, 15);
-        Text = '255';
-        TextSize = 12;
-        ZIndex = 19;
-        Parent = SliderContainer;
-    });
-
-    SliderInner.InputBegan:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-            while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                local MinX = SliderInner.AbsolutePosition.X;
-                local MaxX = MinX + SliderInner.AbsoluteSize.X;
-                local MouseX = math.clamp(Mouse.X, MinX, MaxX);
-                local Value = math.floor(((MouseX - MinX) / (MaxX - MinX)) * 255);
-                
-                local R, G, B = math.floor(ColorPicker.Value.R * 255), 
-                                math.floor(ColorPicker.Value.G * 255), 
-                                math.floor(ColorPicker.Value.B * 255);
-                
-                if ColorChannel == 'R' then R = Value
-                elseif ColorChannel == 'G' then G = Value
-                else B = Value end
-                
-                ColorPicker:SetHSVFromRGB(Color3.fromRGB(R, G, B));
-                ColorPicker:Display();
-                
-                SliderFill.Size = UDim2.new(Value / 255, 0, 1, 0);
-                ValueLabel.Text = tostring(Value);
-                
-                RenderStepped:Wait();
-            end;
-        end;
-    end);
-
-    return SliderOuter, ValueLabel;
-end
-
-CreateRGBSlider('R', 0, 'R');
-CreateRGBSlider('G', 20, 'G');
-CreateRGBSlider('B', 40, 'B');
-
-        local TransparencyBoxOuter, TransparencyBoxInner, TransparencyCursor;
-        
-        -- Always create transparency bar under the main color square
-        TransparencyBoxOuter = Library:Create('Frame', {
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.fromOffset(4, 228);
-            Size = UDim2.new(0, 200, 0, 15);
-            ZIndex = 19;
-            Parent = PickerFrameInner;
-        });
-
-        TransparencyBoxInner = Library:Create('Frame', {
-            BackgroundColor3 = ColorPicker.Value;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 19;
-            Parent = TransparencyBoxOuter;
-        });
-
-        Library:AddToRegistry(TransparencyBoxInner, { BorderColor3 = 'OutlineColor' });
-
-        Library:Create('ImageLabel', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, 0, 1, 0);
-            Image = 'http://www.roblox.com/asset/?id=12978095818';
-            ZIndex = 20;
-            Parent = TransparencyBoxInner;
-        });
-
-        TransparencyCursor = Library:Create('Frame', { 
-            BackgroundColor3 = Color3.new(1, 1, 1);
-            AnchorPoint = Vector2.new(0.5, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(0, 1, 1, 0);
-            ZIndex = 21;
-            Parent = TransparencyBoxInner;
-        });
-
-        local DisplayLabel = Library:CreateLabel({
-            Size = UDim2.new(1, 0, 0, 14);
-            Position = UDim2.fromOffset(5, 5);
-            TextXAlignment = Enum.TextXAlignment.Left;
-            TextSize = 14;
-            Text = ColorPicker.Title,--Info.Default;
-            TextWrapped = false;
-            ZIndex = 16;
-            Parent = PickerFrameInner;
-        });
-
-        
-
-        -- Minus button
-local MinusButton = Library:Create('TextLabel', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -30, 0, 0);
-    Size = UDim2.new(0, 15, 1, 0);
-    Font = Library.Font;
-    Text = '-';
-    TextColor3 = Library.FontColor;
-    TextSize = 16;
-    TextStrokeTransparency = 0;
-    ZIndex = 10;
-    Parent = SliderInner;
-});
-
-Library:ApplyTextStroke(MinusButton);
-Library:AddToRegistry(MinusButton, {
-    TextColor3 = 'FontColor';
-});
-
--- Plus button  
-local PlusButton = Library:Create('TextLabel', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -15, 0, 0);
-    Size = UDim2.new(0, 15, 1, 0);
-    Font = Library.Font;
-    Text = '+';
-    TextColor3 = Library.FontColor;
-    TextSize = 16;
-    TextStrokeTransparency = 0;
-    ZIndex = 10;
-    Parent = SliderInner;
-});
-
-Library:ApplyTextStroke(PlusButton);
-Library:AddToRegistry(PlusButton, {
-    TextColor3 = 'FontColor';
-});
-
--- Make buttons clickable
-local MinusClickFrame = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -30, 0, 0);
-    Size = UDim2.new(0, 15, 1, 0);
-    ZIndex = 11;
-    Parent = SliderInner;
-});
-
-local PlusClickFrame = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -15, 0, 0);
-    Size = UDim2.new(0, 15, 1, 0);
-    ZIndex = 11;
-    Parent = SliderInner;
-});
-
-MinusClickFrame.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local NewValue = math.max(Slider.Min, Slider.Value - 1);
-        Slider:SetValue(NewValue);
-        Library:AttemptSave();
-    end;
-end);
-
-PlusClickFrame.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local NewValue = math.min(Slider.Max, Slider.Value + 1);
-        Slider:SetValue(NewValue);
-        Library:AttemptSave();
-    end;
-end);
-
-Library:OnHighlight(MinusClickFrame, MinusButton,
-    { TextColor3 = 'AccentColor' },
-    { TextColor3 = 'FontColor' }
-);
-
-Library:OnHighlight(PlusClickFrame, PlusButton,
-    { TextColor3 = 'AccentColor' },
-    { TextColor3 = 'FontColor' }
-);
-
-
-        local ContextMenu = {}
-        do
-            ContextMenu.Options = {}
-            ContextMenu.Container = Library:Create('Frame', {
-                BorderColor3 = Color3.new(),
-                ZIndex = 14,
-
-                Visible = false,
-                Parent = ScreenGui
-            })
-
-            ContextMenu.Inner = Library:Create('Frame', {
-                BackgroundColor3 = Library.BackgroundColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.fromScale(1, 1);
-                ZIndex = 15;
-                Parent = ContextMenu.Container;
-            });
-
-            Library:Create('UIListLayout', {
-                Name = 'Layout',
-                FillDirection = Enum.FillDirection.Vertical;
-                SortOrder = Enum.SortOrder.LayoutOrder;
-                Parent = ContextMenu.Inner;
-            });
-
-            Library:Create('UIPadding', {
-                Name = 'Padding',
-                PaddingLeft = UDim.new(0, 4),
-                Parent = ContextMenu.Inner,
-            });
-
-            local function updateMenuPosition()
-                ContextMenu.Container.Position = UDim2.fromOffset(
-                    (DisplayFrame.AbsolutePosition.X + DisplayFrame.AbsoluteSize.X) + 4,
-                    DisplayFrame.AbsolutePosition.Y + 1
-                )
-            end
-
-            local function updateMenuSize()
-                local menuWidth = 60
-                for i, label in next, ContextMenu.Inner:GetChildren() do
-                    if label:IsA('TextLabel') then
-                        menuWidth = math.max(menuWidth, label.TextBounds.X)
-                    end
-                end
-
-                ContextMenu.Container.Size = UDim2.fromOffset(
-                    menuWidth + 8,
-                    ContextMenu.Inner.Layout.AbsoluteContentSize.Y + 4
-                )
-            end
-
-            DisplayFrame:GetPropertyChangedSignal('AbsolutePosition'):Connect(updateMenuPosition)
-            ContextMenu.Inner.Layout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateMenuSize)
-
-            task.spawn(updateMenuPosition)
-            task.spawn(updateMenuSize)
-
-            Library:AddToRegistry(ContextMenu.Inner, {
-                BackgroundColor3 = 'BackgroundColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            function ContextMenu:Show()
-                self.Container.Visible = true
-            end
-
-            function ContextMenu:Hide()
-                self.Container.Visible = false
-            end
-
-            function ContextMenu:AddOption(Str, Callback)
-                if type(Callback) ~= 'function' then
-                    Callback = function() end
-                end
-
-                local Button = Library:CreateLabel({
-                    Active = false;
-                    Size = UDim2.new(1, 0, 0, 15);
-                    TextSize = 13;
-                    Text = Str;
-                    ZIndex = 16;
-                    Parent = self.Inner;
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                });
-
-                Library:OnHighlight(Button, Button, 
-                    { TextColor3 = 'AccentColor' },
-                    { TextColor3 = 'FontColor' }
-                );
-
-                Button.InputBegan:Connect(function(Input)
-                    if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-                        return
-                    end
-
-                    Callback()
-                end)
-            end
-
-            ContextMenu:AddOption('Copy color', function()
-                Library.ColorClipboard = ColorPicker.Value
-                Library:Notify('Copied color!', 2)
-            end)
-
-            ContextMenu:AddOption('Paste color', function()
-                if not Library.ColorClipboard then
-                    return Library:Notify('You have not copied a color!', 2)
-                end
-                ColorPicker:SetValueRGB(Library.ColorClipboard)
-            end)
-
-
-            ContextMenu:AddOption('Copy HEX', function()
-                pcall(setclipboard, ColorPicker.Value:ToHex())
-                Library:Notify('Copied hex code to clipboard!', 2)
-            end)
-
-            ContextMenu:AddOption('Copy RGB', function()
-                pcall(setclipboard, table.concat({ math.floor(ColorPicker.Value.R * 255), math.floor(ColorPicker.Value.G * 255), math.floor(ColorPicker.Value.B * 255) }, ', '))
-                Library:Notify('Copied RGB values to clipboard!', 2)
-            end)
-
-        end
-
-        Library:AddToRegistry(PickerFrameInner, { BackgroundColor3 = 'BackgroundColor'; BorderColor3 = 'OutlineColor'; });
-        Library:AddToRegistry(Highlight, { BackgroundColor3 = 'AccentColor'; });
-        Library:AddToRegistry(SatVibMapInner, { BackgroundColor3 = 'BackgroundColor'; BorderColor3 = 'OutlineColor'; });
-
-        Library:AddToRegistry(HueBoxInner, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
-        Library:AddToRegistry(RgbBoxBase.Frame, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
-        Library:AddToRegistry(RgbBox, { TextColor3 = 'FontColor', });
-        Library:AddToRegistry(HueBox, { TextColor3 = 'FontColor', });
-
-        local SequenceTable = {};
-
-        for Hue = 0, 1, 0.1 do
-            table.insert(SequenceTable, ColorSequenceKeypoint.new(Hue, Color3.fromHSV(Hue, 1, 1)));
-        end;
-
-        local HueSelectorGradient = Library:Create('UIGradient', {
-            Color = ColorSequence.new(SequenceTable);
-            Rotation = 90;
-            Parent = HueSelectorInner;
-        });
-
-        HueBox.FocusLost:Connect(function(enter)
-            if enter then
-                local success, result = pcall(Color3.fromHex, HueBox.Text)
-                if success and typeof(result) == 'Color3' then
-                    ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib = Color3.toHSV(result)
-                end
-            end
-
-            ColorPicker:Display()
-        end)
-
-        RgbBox.FocusLost:Connect(function(enter)
-            if enter then
-                local r, g, b = RgbBox.Text:match('(%d+),%s*(%d+),%s*(%d+)')
-                if r and g and b then
-                    ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib = Color3.toHSV(Color3.fromRGB(r, g, b))
-                end
-            end
-
-            ColorPicker:Display()
-        end)
-
-        function ColorPicker:Display()
-            ColorPicker.Value = Color3.fromHSV(ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib);
-            SatVibMap.BackgroundColor3 = Color3.fromHSV(ColorPicker.Hue, 1, 1);
-
-Library:Create(DisplayInner, {
-    BackgroundColor3 = ColorPicker.Value;
-    BackgroundTransparency = ColorPicker.Transparency;
-});
-
-            TransparencyBoxInner.BackgroundColor3 = ColorPicker.Value;
-            TransparencyCursor.Position = UDim2.new(1 - ColorPicker.Transparency, 0, 0, 0);
-
-            CursorOuter.Position = UDim2.new(ColorPicker.Sat, 0, 1 - ColorPicker.Vib, 0);
-            HueCursor.Position = UDim2.new(0, 0, ColorPicker.Hue, 0);
-
-            HueBox.Text = '#' .. ColorPicker.Value:ToHex()
-            RgbBox.Text = table.concat({ math.floor(ColorPicker.Value.R * 255), math.floor(ColorPicker.Value.G * 255), math.floor(ColorPicker.Value.B * 255) }, ', ')
-
-            Library:SafeCallback(ColorPicker.Callback, ColorPicker.Value, ColorPicker.Transparency);
-            Library:SafeCallback(ColorPicker.Changed, ColorPicker.Value, ColorPicker.Transparency);
-        end;
-
-        function ColorPicker:OnChanged(Func)
-            ColorPicker.Changed = Func;
-            Func(ColorPicker.Value, ColorPicker.Transparency)
-        end;
-
-        function ColorPicker:Show()
-            for Frame, Val in next, Library.OpenedFrames do
-                if Frame.Name == 'Color' then
-                    Frame.Visible = false;
-                    Library.OpenedFrames[Frame] = nil;
-                end;
-            end;
-
-            PickerFrameOuter.Position = UDim2.fromOffset(DisplayFrame.AbsolutePosition.X, DisplayFrame.AbsolutePosition.Y + 18);
-            PickerFrameOuter.Visible = true;
-            Library.OpenedFrames[PickerFrameOuter] = true;
-        end;
-
-        function ColorPicker:Hide()
-            PickerFrameOuter.Visible = false;
-            Library.OpenedFrames[PickerFrameOuter] = nil;
-        end;
-
-        function ColorPicker:SetValue(HSV, Transparency)
-            local Color = Color3.fromHSV(HSV[1], HSV[2], HSV[3]);
-
-            ColorPicker.Transparency = Transparency or 0;
-            ColorPicker:SetHSVFromRGB(Color);
-            ColorPicker:Display();
-        end;
-
-        function ColorPicker:SetValueRGB(Color, Transparency)
-            ColorPicker.Transparency = Transparency or 0;
-            ColorPicker:SetHSVFromRGB(Color);
-            ColorPicker:Display();
-        end;
-
-        SatVibMap.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                    local MinX = SatVibMap.AbsolutePosition.X;
-                    local MaxX = MinX + SatVibMap.AbsoluteSize.X;
-                    local MouseX = math.clamp(Mouse.X, MinX, MaxX);
-
-                    local MinY = SatVibMap.AbsolutePosition.Y;
-                    local MaxY = MinY + SatVibMap.AbsoluteSize.Y;
-                    local MouseY = math.clamp(Mouse.Y, MinY, MaxY);
-
-                    ColorPicker.Sat = (MouseX - MinX) / (MaxX - MinX);
-                    ColorPicker.Vib = 1 - ((MouseY - MinY) / (MaxY - MinY));
-                    ColorPicker:Display();
-
-                    RenderStepped:Wait();
-                end;
-
-                Library:AttemptSave();
-            end;
-        end);
-
-        HueSelectorInner.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                    local MinY = HueSelectorInner.AbsolutePosition.Y;
-                    local MaxY = MinY + HueSelectorInner.AbsoluteSize.Y;
-                    local MouseY = math.clamp(Mouse.Y, MinY, MaxY);
-
-                    ColorPicker.Hue = ((MouseY - MinY) / (MaxY - MinY));
-                    ColorPicker:Display();
-
-                    RenderStepped:Wait();
-                end;
-
-                Library:AttemptSave();
-            end;
-        end);
-
-        DisplayFrame.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                if PickerFrameOuter.Visible then
-                    ColorPicker:Hide()
-                else
-                    ContextMenu:Hide()
-                    ColorPicker:Show()
-                end;
-            elseif Input.UserInputType == Enum.UserInputType.MouseButton2 and not Library:MouseIsOverOpenedFrame() then
-                ContextMenu:Show()
-                ColorPicker:Hide()
-            end
-        end);
-
-        TransparencyBoxInner.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                    local MinX = TransparencyBoxInner.AbsolutePosition.X;
-                    local MaxX = MinX + TransparencyBoxInner.AbsoluteSize.X;
-                    local MouseX = math.clamp(Mouse.X, MinX, MaxX);
-
-                    ColorPicker.Transparency = 1 - ((MouseX - MinX) / (MaxX - MinX));
-
-                    ColorPicker:Display();
-
-                    RenderStepped:Wait();
-                end;
-
-                Library:AttemptSave();
-            end;
-        end);
-
-        Library:GiveSignal(InputService.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local AbsPos, AbsSize = PickerFrameOuter.AbsolutePosition, PickerFrameOuter.AbsoluteSize;
-
-                if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X
-                    or Mouse.Y < (AbsPos.Y - 20 - 1) or Mouse.Y > AbsPos.Y + AbsSize.Y then
-
-                    ColorPicker:Hide();
-                end;
-
-                if not Library:IsMouseOverFrame(ContextMenu.Container) then
-                    ContextMenu:Hide()
-                end
-            end;
-
-            if Input.UserInputType == Enum.UserInputType.MouseButton2 and ContextMenu.Container.Visible then
-                if not Library:IsMouseOverFrame(ContextMenu.Container) and not Library:IsMouseOverFrame(DisplayFrame) then
-                    ContextMenu:Hide()
-                end
-            end
-        end))
-
-        ColorPicker:Display();
-        ColorPicker.DisplayFrame = DisplayFrame;
-
-        -- Add to parent's Addons list so toggle knows not to fire when clicking on colorpicker
-        local ParentObj = self;
-        if ParentObj.Addons then
-            table.insert(ParentObj.Addons, ColorPicker);
-        end;
-
-        Options[Idx] = ColorPicker;
-
-        return self;
-    end;
-
-            function Funcs:AddKeyPicker(Idx, Info)
-        local ParentObj = self;
-        local ToggleLabel = self.TextLabel;
-        local Container = self.Container;
-
-        assert(Info.Default, 'AddKeyPicker: Missing default value.');
-
-        local KeyPicker = {
-            Value = Info.Default;
-            Toggled = false;
-            Mode = Info.Mode or 'Toggle';
-            Type = 'KeyPicker';
-            Callback = Info.Callback or function(Value) end;
-            ChangedCallback = Info.ChangedCallback or function(New) end;
-            SyncToggleState = Info.SyncToggleState or false;
-        };
-
-        if KeyPicker.SyncToggleState then
-            Info.Modes = { 'Toggle' }
-            Info.Mode = 'Toggle'
-        end
-
-        local PickOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(0, 28, 0, 15);
-            ZIndex = 9;
-            Parent = ToggleLabel;
-        });
-
-        local PickInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 10;
-            Parent = PickOuter;
-        });
-
-        Library:AddToRegistry(PickInner, {
-            BackgroundColor3 = 'BackgroundColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        Library:OnHighlight(PickOuter, PickOuter, { BorderColor3 = 'AccentColor' }, { BorderColor3 = 'Black' });
-
-        local DisplayLabel = Library:CreateLabel({
-            Size = UDim2.new(1, 0, 1, 0);
-            TextSize = 13;
-            Text = Info.Default;
-            TextWrapped = true;
-            ZIndex = 11;
-            Parent = PickInner;
-        });
-
-        local ModeSelectOuter = Library:Create('Frame', {
-            BorderColor3 = Color3.new(0, 0, 0);
-            Position = UDim2.fromOffset(ToggleLabel.AbsolutePosition.X + ToggleLabel.AbsoluteSize.X + 4, ToggleLabel.AbsolutePosition.Y + 1);
-            Size = UDim2.new(0, 60, 0, 47);
-            Visible = false;
-            ZIndex = 14;
-            Parent = ScreenGui;
-        });
-
-        ToggleLabel:GetPropertyChangedSignal('AbsolutePosition'):Connect(function()
-            ModeSelectOuter.Position = UDim2.fromOffset(ToggleLabel.AbsolutePosition.X + ToggleLabel.AbsoluteSize.X + 4, ToggleLabel.AbsolutePosition.Y + 1);
-        end);
-
-        local ModeSelectInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 15;
-            Parent = ModeSelectOuter;
-        });
-
-        Library:AddToRegistry(ModeSelectInner, {
-            BackgroundColor3 = 'BackgroundColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        Library:Create('UIListLayout', {
-            FillDirection = Enum.FillDirection.Vertical;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            Parent = ModeSelectInner;
-        });
-
-        local ContainerLabel = Library:CreateLabel({
-            TextXAlignment = Enum.TextXAlignment.Left;
-            Size = UDim2.new(1, 0, 0, 18);
-            TextSize = 13;
-            Visible = false;
-            ZIndex = 110;
-            Parent = Library.KeybindContainer;
-        }, true);
-
-        local Modes = Info.Modes or { 'Always', 'Toggle', 'Hold' };
-        local ModeButtons = {};
-
-        for _, Mode in next, Modes do
-            local ModeButton = {};
-
-            local Label = Library:CreateLabel({
-                Active = false;
-                Size = UDim2.new(1, 0, 0, 15);
-                TextSize = 13;
-                Text = Mode;
-                ZIndex = 16;
-                Parent = ModeSelectInner;
-            });
-
-            function ModeButton:Select()
-                for _, Button in next, ModeButtons do
-                    Button:Deselect();
-                end;
-                KeyPicker.Mode = Mode;
-                Label.TextColor3 = Library.AccentColor;
-                Library.RegistryMap[Label].Properties.TextColor3 = 'AccentColor';
-                ModeSelectOuter.Visible = false;
-            end;
-
-            function ModeButton:Deselect()
-                Label.TextColor3 = Library.FontColor;
-                Library.RegistryMap[Label].Properties.TextColor3 = 'FontColor';
-            end;
-
-            Label.InputBegan:Connect(function(Input)
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    ModeButton:Select();
-                    Library:AttemptSave();
-                end;
-            end);
-
-            if Mode == KeyPicker.Mode then
-                ModeButton:Select();
-            end;
-
-            ModeButtons[Mode] = ModeButton;
-        end;
-
-        function KeyPicker:Update()
-            if Info.NoUI then return end
-            local State = KeyPicker:GetState()
-            ContainerLabel.Text = string.format('[%s] %s (%s)', KeyPicker.Value or "None", Info.Text or "", KeyPicker.Mode or "Toggle")
-            ContainerLabel.Visible = true
-            ContainerLabel.TextColor3 = State and Library.AccentColor or Library.FontColor
-            local YSize = 0
-            local XSize = 0
-            for _, Label in next, Library.KeybindContainer:GetChildren() do
-                if Label:IsA('TextLabel') and Label.Visible then
-                    YSize = YSize + 18
-                    if Label.TextBounds.X > XSize then XSize = Label.TextBounds.X end
-                end
-            end
-            if YSize > 0 then
-                Library.KeybindFrame.Size = UDim2.new(0, math.max(XSize + 10, 210), 0, YSize + 23)
-            end
-        end
-
-        function KeyPicker:GetState()
-            if KeyPicker.Mode == 'Always' then return true end
-            if KeyPicker.Mode == 'Hold' then
-                if KeyPicker.Value == 'None' then return false end
-                local Key = KeyPicker.Value
-                if Key == 'MB1' or Key == 'MB2' then
-                    return (Key == 'MB1' and InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) or (Key == 'MB2' and InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2))
-                else
-                    return InputService:IsKeyDown(Enum.KeyCode[Key])
-                end
-            end
-            return KeyPicker.Toggled
-        end
-
-        function KeyPicker:SetValue(Data)
-            if not Data then return end
-            
-            local Key, Mode
-            if type(Data) == 'table' then
-                Key = Data[1] or Data.key or KeyPicker.Value
-                Mode = Data[2] or Data.mode or KeyPicker.Mode
-            elseif typeof(Data) == 'EnumItem' then
-                Key = Data.Name
-                Mode = KeyPicker.Mode
-            else
-                Key = tostring(Data)
-                Mode = KeyPicker.Mode
-            end
-            
-            KeyPicker.Value = Key or "None"
-            KeyPicker.Mode = Mode or "Toggle"
-            DisplayLabel.Text = Key or "None"
-            
-            if Mode and ModeButtons[Mode] then
-                ModeButtons[Mode]:Select()
-            end
-            
-            KeyPicker:Update()
-        end
-
-        function KeyPicker:OnClick(Callback) KeyPicker.Clicked = Callback end
-        function KeyPicker:OnChanged(Callback) KeyPicker.Changed = Callback; Callback(KeyPicker.Value) end
-
-        KeyPicker.DisplayFrame = PickOuter;
-
-        if ParentObj.Addons then
-            table.insert(ParentObj.Addons, KeyPicker)
-        end
-
-        function KeyPicker:DoClick()
-            if ParentObj.Type == 'Toggle' and KeyPicker.SyncToggleState then
-                ParentObj:SetValue(not ParentObj.Value)
-            end
-            Library:SafeCallback(KeyPicker.Callback, KeyPicker.Toggled)
-            Library:SafeCallback(KeyPicker.Clicked, KeyPicker.Toggled)
-        end
-
-        local Picking = false;
-
-        PickOuter.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                Picking = true
-                DisplayLabel.Text = ''
-                local Break = false
-                local Text = ''
-                task.spawn(function()
-                    while not Break do
-                        Text = Text == '...' and '' or Text .. '.'
-                        DisplayLabel.Text = Text
-                        wait(0.4)
-                    end
-                end)
-                wait(0.2)
-                local Event
-                Event = InputService.InputBegan:Connect(function(Input)
-                    local Key
-                    if Input.UserInputType == Enum.UserInputType.Keyboard then Key = Input.KeyCode.Name
-                    elseif Input.UserInputType == Enum.UserInputType.MouseButton1 then Key = 'MB1'
-                    elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then Key = 'MB2' end
-                    Break = true
-                    Picking = false
-                    DisplayLabel.Text = Key
-                    KeyPicker.Value = Key
-                    Library:SafeCallback(KeyPicker.ChangedCallback, Key)
-                    Library:SafeCallback(KeyPicker.Changed, Key)
-                    Library:AttemptSave()
-                    Event:Disconnect()
-                end)
-            elseif Input.UserInputType == Enum.UserInputType.MouseButton2 and not Library:MouseIsOverOpenedFrame() then
-                ModeSelectOuter.Visible = true
-            end
-        end)
-
-        Library:GiveSignal(InputService.InputBegan:Connect(function(Input)
-            if not Picking then
-                if KeyPicker.Mode == 'Toggle' then
-                    local Key = KeyPicker.Value
-                    if Key == 'MB1' or Key == 'MB2' then
-                        if (Key == 'MB1' and Input.UserInputType == Enum.UserInputType.MouseButton1) or (Key == 'MB2' and Input.UserInputType == Enum.UserInputType.MouseButton2) then
-                            KeyPicker.Toggled = not KeyPicker.Toggled
-                            KeyPicker:DoClick()
-                        end
-                    elseif Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Key then
-                        KeyPicker.Toggled = not KeyPicker.Toggled
-                        KeyPicker:DoClick()
-                    end
-                end
-                KeyPicker:Update()
-            end
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local AbsPos, AbsSize = ModeSelectOuter.AbsolutePosition, ModeSelectOuter.AbsoluteSize
-                if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X or Mouse.Y < AbsPos.Y - 21 or Mouse.Y > AbsPos.Y + AbsSize.Y then
-                    ModeSelectOuter.Visible = false
-                end
-            end
-        end))
-
-        Library:GiveSignal(InputService.InputEnded:Connect(function(Input)
-            if not Picking then KeyPicker:Update() end
-        end))
-
-        KeyPicker:Update()
-
-        Options[Idx] = KeyPicker
-
-        return self
-    end
-
-    BaseAddons.__index = Funcs;
-    BaseAddons.__namecall = function(Table, Key, ...)
-        return Funcs[Key](...);
-    end;
-end;
-
-local BaseGroupbox = {};
-
-do
-    local Funcs = {};
-
-    function Funcs:AddBlank(Size)
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, 0, 0, Size);
-            ZIndex = 1;
-            Parent = Container;
-        });
-    end;
-
-    function Funcs:AddLabel(Text, DoesWrap)
-        local Label = {};
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local TextLabel = Library:CreateLabel({
-            Size = UDim2.new(1, -4, 0, 15);
-            TextSize = 14;
-            Text = Text;
-            TextWrapped = DoesWrap or false,
-            TextXAlignment = Enum.TextXAlignment.Left;
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        if DoesWrap then
-            local Y = select(2, Library:GetTextBounds(Text, Library.Font, 14, Vector2.new(TextLabel.AbsoluteSize.X, math.huge)))
-            TextLabel.Size = UDim2.new(1, -4, 0, Y)
-        else
-            Library:Create('UIListLayout', {
-                Padding = UDim.new(0, 4);
-                FillDirection = Enum.FillDirection.Horizontal;
-                HorizontalAlignment = Enum.HorizontalAlignment.Right;
-                SortOrder = Enum.SortOrder.LayoutOrder;
-                Parent = TextLabel;
-            });
-        end
-
-        Label.TextLabel = TextLabel;
-        Label.Container = Container;
-
-        function Label:SetText(Text)
-            TextLabel.Text = Text
-
-            if DoesWrap then
-                local Y = select(2, Library:GetTextBounds(Text, Library.Font, 14, Vector2.new(TextLabel.AbsoluteSize.X, math.huge)))
-                TextLabel.Size = UDim2.new(1, -4, 0, Y)
-            end
-
-            Groupbox:Resize();
-        end
-
-        if (not DoesWrap) then
-            setmetatable(Label, BaseAddons);
-        end
-
-        Groupbox:AddBlank(5);
-        Groupbox:Resize();
-
-        return Label;
-    end;
-
-    function Funcs:AddButton(...)
-        -- TODO: Eventually redo this
-        local Button = {};
-        local function ProcessButtonParams(Class, Obj, ...)
-            local Props = select(1, ...)
-            if type(Props) == 'table' then
-                Obj.Text = Props.Text
-                Obj.Func = Props.Func
-                Obj.DoubleClick = Props.DoubleClick
-                Obj.Tooltip = Props.Tooltip
-            else
-                Obj.Text = select(1, ...)
-                Obj.Func = select(2, ...)
-            end
-
-            assert(type(Obj.Func) == 'function', 'AddButton: `Func` callback is missing.');
-        end
-
-        ProcessButtonParams('Button', Button, ...)
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local function CreateBaseButton(Button)
-            local Outer = Library:Create('Frame', {
-                BackgroundColor3 = Color3.new(0, 0, 0);
-                BorderColor3 = Color3.new(0, 0, 0);
-                Size = UDim2.new(1, -4, 0, 20);
-                ZIndex = 5;
-            });
-
-            local Inner = Library:Create('Frame', {
-                BackgroundColor3 = Library.MainColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 1, 0);
-                ZIndex = 6;
-                Parent = Outer;
-            });
-
-            local Label = Library:CreateLabel({
-                Size = UDim2.new(1, 0, 1, 0);
-                TextSize = 14;
-                Text = Button.Text;
-                ZIndex = 6;
-                Parent = Inner;
-            });
-
-            Library:AddToRegistry(Outer, {
-                BorderColor3 = 'Black';
-            });
-
-            Library:AddToRegistry(Inner, {
-                BackgroundColor3 = 'MainColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            Library:OnHighlight(Outer, Outer,
-                { BorderColor3 = 'AccentColor' },
-                { BorderColor3 = 'Black' }
-            );
-
-            return Outer, Inner, Label
-        end
-
-        local function InitEvents(Button)
-            local function WaitForEvent(event, timeout, validator)
-                local bindable = Instance.new('BindableEvent')
-                local connection = event:Once(function(...)
-
-                    if type(validator) == 'function' and validator(...) then
-                        bindable:Fire(true)
-                    else
-                        bindable:Fire(false)
-                    end
-                end)
-                task.delay(timeout, function()
-                    connection:disconnect()
-                    bindable:Fire(false)
-                end)
-                return bindable.Event:Wait()
-            end
-
-            local function ValidateClick(Input)
-                if Library:MouseIsOverOpenedFrame() then
-                    return false
-                end
-
-                if Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-                    return false
-                end
-
-                return true
-            end
-
-            Button.Outer.InputBegan:Connect(function(Input)
-                if not ValidateClick(Input) then return end
-                if Button.Locked then return end
-
-                if Button.DoubleClick then
-                    Library:RemoveFromRegistry(Button.Label)
-                    Library:AddToRegistry(Button.Label, { TextColor3 = 'AccentColor' })
-
-                    Button.Label.TextColor3 = Library.AccentColor
-                    Button.Label.Text = 'Are you sure?'
-                    Button.Locked = true
-
-                    local clicked = WaitForEvent(Button.Outer.InputBegan, 0.5, ValidateClick)
-
-                    Library:RemoveFromRegistry(Button.Label)
-                    Library:AddToRegistry(Button.Label, { TextColor3 = 'FontColor' })
-
-                    Button.Label.TextColor3 = Library.FontColor
-                    Button.Label.Text = Button.Text
-                    task.defer(rawset, Button, 'Locked', false)
-
-                    if clicked then
-                        Library:SafeCallback(Button.Func)
-                    end
-
-                    return
-                end
-
-                Library:SafeCallback(Button.Func);
-            end)
-        end
-
-        Button.Outer, Button.Inner, Button.Label = CreateBaseButton(Button)
-        Button.Outer.Parent = Container
-
-        InitEvents(Button)
-
-        function Button:AddTooltip(tooltip)
-            if type(tooltip) == 'string' then
-                Library:AddToolTip(tooltip, self.Outer)
-            end
-            return self
-        end
-
-function Button:AddButton(...)
-    local SubButton = {}
-
-    ProcessButtonParams('SubButton', SubButton, ...)
-
-    self.Outer.Size = UDim2.new(0.5, -2, 0, 20)
-
-    SubButton.Outer, SubButton.Inner, SubButton.Label = CreateBaseButton(SubButton)
-
-    SubButton.Outer.Position = UDim2.new(1, 3, 0, 0)
-    SubButton.Outer.Size = UDim2.new(1, -1, 1, 0)
-    SubButton.Outer.Parent = self.Outer
-    
-    -- Update sub button size when main button resizes
-    self.Outer:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-        SubButton.Outer.Size = UDim2.new(1, -1, 1, 0)
-    end)
-
-            function SubButton:AddTooltip(tooltip)
-                if type(tooltip) == 'string' then
-                    Library:AddToolTip(tooltip, self.Outer)
-                end
-                return SubButton
-            end
-
-            if type(SubButton.Tooltip) == 'string' then
-                SubButton:AddTooltip(SubButton.Tooltip)
-            end
-
-            InitEvents(SubButton)
-            return SubButton
-        end
-
-        if type(Button.Tooltip) == 'string' then
-            Button:AddTooltip(Button.Tooltip)
-        end
-
-        Groupbox:AddBlank(5);
-        Groupbox:Resize();
-
-        return Button;
-    end;
-
-    function Funcs:AddDivider()
-        local Groupbox = self;
-        local Container = self.Container
-
-        local Divider = {
-            Type = 'Divider',
-        }
-
-        Groupbox:AddBlank(2);
-        local DividerOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(1, -4, 0, 5);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        local DividerInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 6;
-            Parent = DividerOuter;
-        });
-
-        Library:AddToRegistry(DividerOuter, {
-            BorderColor3 = 'Black';
-        });
-
-        Library:AddToRegistry(DividerInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        Groupbox:AddBlank(9);
-        Groupbox:Resize();
-    end
-
-    function Funcs:AddInput(Idx, Info)
-        assert(Info.Text, 'AddInput: Missing `Text` string.')
-
-        local Textbox = {
-            Value = Info.Default or '';
-            Numeric = Info.Numeric or false;
-            Finished = Info.Finished or false;
-            Type = 'Input';
-            Callback = Info.Callback or function(Value) end;
-        };
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local InputLabel = Library:CreateLabel({
-            Size = UDim2.new(1, 0, 0, 15);
-            TextSize = 14;
-            Text = Info.Text;
-            TextXAlignment = Enum.TextXAlignment.Left;
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        Groupbox:AddBlank(1);
-
-        local TextBoxOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(1, -4, 0, 20);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        local TextBoxInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 6;
-            Parent = TextBoxOuter;
-        });
-
-        Library:AddToRegistry(TextBoxInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        Library:OnHighlight(TextBoxOuter, TextBoxOuter,
-            { BorderColor3 = 'AccentColor' },
-            { BorderColor3 = 'Black' }
-        );
-
-        if type(Info.Tooltip) == 'string' then
-            Library:AddToolTip(Info.Tooltip, TextBoxOuter)
-        end
-
-        local Container = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            ClipsDescendants = true;
-
-            Position = UDim2.new(0, 5, 0, 0);
-            Size = UDim2.new(1, -5, 1, 0);
-
-            ZIndex = 7;
-            Parent = TextBoxInner;
-        })
-
-        local Box = Library:Create('TextBox', {
-            BackgroundTransparency = 1;
-
-            Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.fromScale(5, 1),
-
-            Font = Library.Font;
-            PlaceholderColor3 = Color3.fromRGB(190, 190, 190);
-            PlaceholderText = Info.Placeholder or '';
-
-            Text = Info.Default or '';
-            TextColor3 = Library.FontColor;
-            TextSize = 14;
-            TextStrokeTransparency = 0;
-            TextXAlignment = Enum.TextXAlignment.Left;
-
-            ZIndex = 7;
-            Parent = Container;
-        });
-
-        Library:ApplyTextStroke(Box);
-
-        function Textbox:SetValue(Text)
-            if Info.MaxLength and #Text > Info.MaxLength then
-                Text = Text:sub(1, Info.MaxLength);
-            end;
-
-            if Textbox.Numeric then
-                if (not tonumber(Text)) and Text:len() > 0 then
-                    Text = Textbox.Value
-                end
-            end
-
-            Textbox.Value = Text;
-            Box.Text = Text;
-
-            Library:SafeCallback(Textbox.Callback, Textbox.Value);
-            Library:SafeCallback(Textbox.Changed, Textbox.Value);
-        end;
-
-        if Textbox.Finished then
-            Box.FocusLost:Connect(function(enter)
-                if not enter then return end
-
-                Textbox:SetValue(Box.Text);
-                Library:AttemptSave();
-            end)
-        else
-            Box:GetPropertyChangedSignal('Text'):Connect(function()
-                Textbox:SetValue(Box.Text);
-                Library:AttemptSave();
-            end);
-        end
-
-        -- https://devforum.roblox.com/t/how-to-make-textboxes-follow-current-cursor-position/1368429/6
-        -- thank you nicemike40 :)
-
-        local function Update()
-            local PADDING = 2
-            local reveal = Container.AbsoluteSize.X
-
-            if not Box:IsFocused() or Box.TextBounds.X <= reveal - 2 * PADDING then
-                -- we aren't focused, or we fit so be normal
-                Box.Position = UDim2.new(0, PADDING, 0, 0)
-            else
-                -- we are focused and don't fit, so adjust position
-                local cursor = Box.CursorPosition
-                if cursor ~= -1 then
-                    -- calculate pixel width of text from start to cursor
-                    local subtext = string.sub(Box.Text, 1, cursor-1)
-                    local width = TextService:GetTextSize(subtext, Box.TextSize, Box.Font, Vector2.new(math.huge, math.huge)).X
-
-                    -- check if we're inside the box with the cursor
-                    local currentCursorPos = Box.Position.X.Offset + width
-
-                    -- adjust if necessary
-                    if currentCursorPos < PADDING then
-                        Box.Position = UDim2.fromOffset(PADDING-width, 0)
-                    elseif currentCursorPos > reveal - PADDING - 1 then
-                        Box.Position = UDim2.fromOffset(reveal-width-PADDING-1, 0)
-                    end
-                end
-            end
-        end
-
-        task.spawn(Update)
-
-        Box:GetPropertyChangedSignal('Text'):Connect(Update)
-        Box:GetPropertyChangedSignal('CursorPosition'):Connect(Update)
-        Box.FocusLost:Connect(Update)
-        Box.Focused:Connect(Update)
-
-        Library:AddToRegistry(Box, {
-            TextColor3 = 'FontColor';
-        });
-
-        function Textbox:OnChanged(Func)
-            Textbox.Changed = Func;
-            Func(Textbox.Value);
-        end;
-
-        Groupbox:AddBlank(5);
-        Groupbox:Resize();
-
-        Options[Idx] = Textbox;
-
-        return Textbox;
-    end;
-
-    function Funcs:AddToggle(Idx, Info)
-        assert(Info.Text, 'AddInput: Missing `Text` string.')
-
-        local Toggle = {
-            Value = Info.Default or false;
-            Type = 'Toggle';
-
-            Callback = Info.Callback or function(Value) end;
-            Addons = {},
-            Risky = Info.Risky,
-        };
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local ToggleOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(0, 13, 0, 13);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        Library:AddToRegistry(ToggleOuter, {
-            BorderColor3 = 'Black';
-        });
-
-        local ToggleInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 6;
-            Parent = ToggleOuter;
-        });
-
-        Library:AddToRegistry(ToggleInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        local ToggleLabel = Library:CreateLabel({
-            Size = UDim2.new(0, 216, 1, 0);
-            Position = UDim2.new(1, 6, 0, 0);
-            TextSize = 14;
-            Text = Info.Text;
-            TextXAlignment = Enum.TextXAlignment.Left;
-            ZIndex = 6;
-            Parent = ToggleInner;
-        });
-
-        Library:Create('UIListLayout', {
-            Padding = UDim.new(0, 4);
-            FillDirection = Enum.FillDirection.Horizontal;
-            HorizontalAlignment = Enum.HorizontalAlignment.Right;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            Parent = ToggleLabel;
-        });
-
-        local ToggleRegion = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(0, 216 + 13 + 6, 1, 0);
-            ZIndex = 8;
-            Parent = ToggleOuter;
-        });
-
-        local function UpdateLabelSize()
-            local w = Container.AbsoluteSize.X;
-            if w > 0 then
-                ToggleLabel.Size = UDim2.new(0, w - 19, 1, 0);
-                ToggleRegion.Size = UDim2.new(0, w, 1, 0);
-            end
-        end
-        Container:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateLabelSize);
-        task.spawn(UpdateLabelSize);
-
-        Library:OnHighlight(ToggleRegion, ToggleOuter,
-            { BorderColor3 = 'AccentColor' },
-            { BorderColor3 = 'Black' }
-        );
-
-        function Toggle:UpdateColors()
-            Toggle:Display();
-        end;
-
-        if type(Info.Tooltip) == 'string' then
-            Library:AddToolTip(Info.Tooltip, ToggleRegion)
-        end
-
-function Toggle:Display()
-    local targetColor = Toggle.Value and Library.AccentColor or Library.MainColor;
-    local targetBorder = Toggle.Value and Library.AccentColorDark or Library.OutlineColor;
-
-    TweenService:Create(ToggleInner, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        BackgroundColor3 = targetColor,
-        BorderColor3 = targetBorder
-    }):Play();
-
-    Library.RegistryMap[ToggleInner].Properties.BackgroundColor3 = Toggle.Value and 'AccentColor' or 'MainColor';
-    Library.RegistryMap[ToggleInner].Properties.BorderColor3 = Toggle.Value and 'AccentColorDark' or 'OutlineColor';
-end;
-
-        function Toggle:OnChanged(Func)
-            Toggle.Changed = Func;
-            Func(Toggle.Value);
-        end;
-
-        function Toggle:SetValue(Bool)
-            Bool = (not not Bool);
-
-            Toggle.Value = Bool;
-            Toggle:Display();
-
-            for _, Addon in next, Toggle.Addons do
-                if Addon.Type == 'KeyPicker' and Addon.SyncToggleState then
-                    Addon.Toggled = Bool
-                    Addon:Update()
-                end
-            end
-
-            Library:SafeCallback(Toggle.Callback, Toggle.Value);
-            Library:SafeCallback(Toggle.Changed, Toggle.Value);
-            Library:UpdateDependencyBoxes();
-        end;
-
-        ToggleRegion.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                -- Check if mouse is over any addon (colorpicker/keypicker)
-                local dominated = false;
-                for _, Addon in next, Toggle.Addons do
-                    if Addon.DisplayFrame then
-                        local pos = Addon.DisplayFrame.AbsolutePosition;
-                        local size = Addon.DisplayFrame.AbsoluteSize;
-                        if Mouse.X >= pos.X and Mouse.X <= pos.X + size.X and Mouse.Y >= pos.Y and Mouse.Y <= pos.Y + size.Y then
-                            dominated = true;
-                            break;
-                        end;
-                    end;
-                end;
-                if not dominated then
-                    Toggle:SetValue(not Toggle.Value);
-                    Library:AttemptSave();
-                end;
-            end;
-        end);
-
-        if Toggle.Risky then
-            Library:RemoveFromRegistry(ToggleLabel)
-            ToggleLabel.TextColor3 = Library.RiskColor
-            Library:AddToRegistry(ToggleLabel, { TextColor3 = 'RiskColor' })
-        end
-
-        Toggle:Display();
-        Groupbox:AddBlank(Info.BlankSize or 5 + 2);
-        Groupbox:Resize();
-
-        Toggle.TextLabel = ToggleLabel;
-        Toggle.Container = Container;
-        setmetatable(Toggle, BaseAddons);
-
-        Toggles[Idx] = Toggle;
-
-        Library:UpdateDependencyBoxes();
-
-        return Toggle;
-    end;
-
-    function Funcs:AddSlider(Idx, Info)
-        assert(Info.Default, 'AddSlider: Missing default value.');
-        assert(Info.Text, 'AddSlider: Missing slider text.');
-        assert(Info.Min, 'AddSlider: Missing minimum value.');
-        assert(Info.Max, 'AddSlider: Missing maximum value.');
-        assert(Info.Rounding, 'AddSlider: Missing rounding value.');
-
-local Slider = {
-            Value = Info.Default;
-            Min = Info.Min;
-            Max = Info.Max;
-            Rounding = Info.Rounding;
-            MaxSize = 232;
-            Type = 'Slider';
-            Callback = Info.Callback or function(Value) end;
-            UpdateMaxSize = function(self)
-                self.MaxSize = SliderInner.AbsoluteSize.X;
-            end;
-        };
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        if not Info.Compact then
-            Library:CreateLabel({
-                Size = UDim2.new(1, 0, 0, 10);
-                TextSize = 14;
-                Text = Info.Text;
-                TextXAlignment = Enum.TextXAlignment.Left;
-                TextYAlignment = Enum.TextYAlignment.Bottom;
-                ZIndex = 5;
-                Parent = Container;
-            });
-
-            Groupbox:AddBlank(3);
-        end
-
-        local SliderOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(1, -4, 0, 13);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        Library:AddToRegistry(SliderOuter, {
-            BorderColor3 = 'Black';
-        });
-
-        local SliderInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 6;
-            Parent = SliderOuter;
-        });
-
-        Library:AddToRegistry(SliderInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        SliderInner:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-            Slider.MaxSize = SliderInner.AbsoluteSize.X;
-            Slider:Display();
-        end);
-
-        local Fill = Library:Create('Frame', {
-            BackgroundColor3 = Library.AccentColor;
-            BorderColor3 = Library.AccentColorDark;
-            Size = UDim2.new(0, 0, 1, 0);
-            ZIndex = 7;
-            Parent = SliderInner;
-        });
-
-        Library:AddToRegistry(Fill, {
-            BackgroundColor3 = 'AccentColor';
-            BorderColor3 = 'AccentColorDark';
-        });
-
-
-
-        local HideBorderRight = Library:Create('Frame', {
-            BackgroundColor3 = Library.AccentColor;
-            BorderSizePixel = 0;
-            Position = UDim2.new(1, 0, 0, 0);
-            Size = UDim2.new(0, 1, 1, 0);
-            ZIndex = 8;
-            Parent = Fill;
-        });
-
-        Library:AddToRegistry(HideBorderRight, {
-            BackgroundColor3 = 'AccentColor';
-        });
-
-        local DisplayLabel = Library:CreateLabel({
-            Size = UDim2.new(1, 0, 1, 0);
-            TextSize = 14;
-            Text = 'Infinite';
-            ZIndex = 9;
-            Parent = SliderInner;
-        });
-
-        Library:OnHighlight(SliderOuter, SliderOuter,
-            { BorderColor3 = 'AccentColor' },
-            { BorderColor3 = 'Black' }
-        );
-
-        if type(Info.Tooltip) == 'string' then
-            Library:AddToolTip(Info.Tooltip, SliderOuter)
-        end
-
-        function Slider:UpdateColors()
-            Fill.BackgroundColor3 = Library.AccentColor;
-            Fill.BorderColor3 = Library.AccentColorDark;
-        end;
-
-        function Slider:Display()
-            local Suffix = Info.Suffix or '';
-
-            if Info.Compact then
-                DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix
-            elseif Info.HideMax then
-                DisplayLabel.Text = string.format('%s', Slider.Value .. Suffix)
-            else
-                DisplayLabel.Text = string.format('%s/%s', Slider.Value .. Suffix, Slider.Max .. Suffix);
-            end
-
-            local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, Slider.MaxSize));
-            getgenv().InstanceSetSliderFill(Fill, X, HideBorderRight, Slider);
-
-            HideBorderRight.Visible = not (X == Slider.MaxSize or X == 0);
-        end;
-
-        function Slider:OnChanged(Func)
-            Slider.Changed = Func;
-            Func(Slider.Value);
-        end;
-
-        local function Round(Value)
-            if Slider.Rounding == 0 then
-                return math.floor(Value);
-            end;
-
-
-            return tonumber(string.format('%.' .. Slider.Rounding .. 'f', Value))
-        end;
-
-        function Slider:GetValueFromXOffset(X)
-            return Round(Library:MapValue(X, 0, Slider.MaxSize, Slider.Min, Slider.Max));
-        end;
-
-        function Slider:SetValue(Str)
-            local Num = tonumber(Str);
-
-            if (not Num) then
-                return;
-            end;
-
-            Num = math.clamp(Num, Slider.Min, Slider.Max);
-
-            Slider.Value = Num;
-            Slider:Display();
-
-            Library:SafeCallback(Slider.Callback, Slider.Value);
-            Library:SafeCallback(Slider.Changed, Slider.Value);
-        end;
-
-SliderInner.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-        local mPos = Mouse.X;
-        local gPos = Fill.Size.X.Offset;
-        local Diff = mPos - (Fill.AbsolutePosition.X + gPos);
-
-        while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-            local nMPos = Mouse.X;
-            local nX = math.clamp(gPos + (nMPos - mPos) + Diff, 0, Slider.MaxSize);
-
-            local nValue = Slider:GetValueFromXOffset(nX);
-            local OldValue = Slider.Value;
-            Slider.Value = nValue;
-
-            getgenv().InstanceSetSliderFill(Fill, nX, HideBorderRight, Slider);
-
-            -- Update text immediately
-            local Suffix = Info.Suffix or '';
-            if Info.Compact then
-                DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix
-            elseif Info.HideMax then
-                DisplayLabel.Text = string.format('%s', Slider.Value .. Suffix)
-            else
-                DisplayLabel.Text = string.format('%s/%s', Slider.Value .. Suffix, Slider.Max .. Suffix);
-            end
-
-            HideBorderRight.Visible = not (nX == Slider.MaxSize or nX == 0);
-
-            if nValue ~= OldValue then
-                Library:SafeCallback(Slider.Callback, Slider.Value);
-                Library:SafeCallback(Slider.Changed, Slider.Value);
-            end;
-
-            RenderStepped:Wait();
-        end;
-
-        Library:AttemptSave();
-    end;
-end);
-
-        Slider:Display();
-        Groupbox:AddBlank(Info.BlankSize or 6);
-        Groupbox:Resize();
-
-        Options[Idx] = Slider;
-
-        return Slider;
-    end;
-
-function Funcs:AddMultiSlider(Idx, Info)
-        assert(Info.Default, 'AddMultiSlider: Missing default value (table with Min and Max).');
-        assert(Info.Text, 'AddMultiSlider: Missing slider text.');
-        assert(Info.Min, 'AddMultiSlider: Missing minimum value.');
-        assert(Info.Max, 'AddMultiSlider: Missing maximum value.');
-        assert(Info.Rounding, 'AddMultiSlider: Missing rounding value.');
-
-local MultiSlider = {
-            MinValue = Info.Default.Min or Info.Min;
-            MaxValue = Info.Default.Max or Info.Max;
-            Min = Info.Min;
-            Max = Info.Max;
-            Rounding = Info.Rounding;
-            MinMaxSize = 0;
-            MaxMaxSize = 0;
-            Type = 'MultiSlider';
-            Callback = Info.Callback or function(Values) end;
-        };
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        if not Info.Compact then
-            Library:CreateLabel({
-                Size = UDim2.new(1, 0, 0, 10);
-                TextSize = 14;
-                Text = Info.Text;
-                TextXAlignment = Enum.TextXAlignment.Left;
-                TextYAlignment = Enum.TextYAlignment.Bottom;
-                ZIndex = 5;
-                Parent = Container;
-            });
-
-            Groupbox:AddBlank(3);
-        end
-
-        -- Container for both sliders side by side
-        local SliderContainer = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, -4, 0, 13);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        local function CreateSlider(IsMin, Position)
-            local SliderOuter = Library:Create('Frame', {
-                BackgroundColor3 = Color3.new(0, 0, 0);
-                BorderColor3 = Color3.new(0, 0, 0);
-                Position = Position;
-                Size = UDim2.new(0.5, -2, 0, 13);
-                ZIndex = 5;
-                Parent = SliderContainer;
-            });
-
-            Library:AddToRegistry(SliderOuter, {
-                BorderColor3 = 'Black';
-            });
-
-            local SliderInner = Library:Create('Frame', {
-                BackgroundColor3 = Library.MainColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 1, 0);
-                ZIndex = 6;
-                Parent = SliderOuter;
-            });
-
-Library:AddToRegistry(SliderInner, {
-                BackgroundColor3 = 'MainColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            local Fill = Library:Create('Frame', {
-                BackgroundColor3 = Library.AccentColor;
-                BorderColor3 = Library.AccentColorDark;
-                Size = UDim2.new(0, 0, 1, 0);
-                ZIndex = 7;
-                Parent = SliderInner;
-            });
-
-            Library:AddToRegistry(Fill, {
-                BackgroundColor3 = 'AccentColor';
-                BorderColor3 = 'AccentColorDark';
-            });
-
-            local HideBorderRight = Library:Create('Frame', {
-                BackgroundColor3 = Library.AccentColor;
-                BorderSizePixel = 0;
-                Position = UDim2.new(1, 0, 0, 0);
-                Size = UDim2.new(0, 1, 1, 0);
-                ZIndex = 8;
-                Parent = Fill;
-            });
-
-            Library:AddToRegistry(HideBorderRight, {
-                BackgroundColor3 = 'AccentColor';
-            });
-
-            local DisplayLabel = Library:CreateLabel({
-                Size = UDim2.new(1, 0, 1, 0);
-                TextSize = 14;
-                Text = '';
-                ZIndex = 9;
-                Parent = SliderInner;
-            });
-
-            Library:OnHighlight(SliderOuter, SliderOuter,
-                { BorderColor3 = 'AccentColor' },
-                { BorderColor3 = 'Black' }
-            );
-
-            return {
-                Outer = SliderOuter,
-                Inner = SliderInner,
-                Fill = Fill,
-                Label = DisplayLabel,
-                HideBorder = HideBorderRight
-            };
-        end
-
-local MinSlider = CreateSlider(true, UDim2.new(0, 0, 0, 0));
-        local MaxSlider = CreateSlider(false, UDim2.new(0.5, 2, 0, 0));
-
-        -- Update MaxSize when sliders are resized
-        MinSlider.Inner:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-            MultiSlider.MinMaxSize = MinSlider.Inner.AbsoluteSize.X;
-            MultiSlider:Display();
-        end);
-
-        MaxSlider.Inner:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-            MultiSlider.MaxMaxSize = MaxSlider.Inner.AbsoluteSize.X;
-            MultiSlider:Display();
-        end);
-
-        function MultiSlider:Display()
-            local Suffix = Info.Suffix or '';
-            
-            MinSlider.Label.Text = 'Min: ' .. MultiSlider.MinValue .. Suffix;
-            MaxSlider.Label.Text = 'Max: ' .. MultiSlider.MaxValue .. Suffix;
-
-            local MinX = math.ceil(Library:MapValue(MultiSlider.MinValue, MultiSlider.Min, MultiSlider.Max, 0, MultiSlider.MinMaxSize));
-            local MaxX = math.ceil(Library:MapValue(MultiSlider.MaxValue, MultiSlider.Min, MultiSlider.Max, 0, MultiSlider.MaxMaxSize));
-            
-            getgenv().InstanceSetSliderFill(MinSlider.Fill, MinX);
-            getgenv().InstanceSetSliderFill(MaxSlider.Fill, MaxX);
-
-            MinSlider.HideBorder.Visible = not (MinX == MultiSlider.MinMaxSize or MinX == 0);
-            MaxSlider.HideBorder.Visible = not (MaxX == MultiSlider.MaxMaxSize or MaxX == 0);
-        end;
-
-        function MultiSlider:OnChanged(Func)
-            MultiSlider.Changed = Func;
-            Func({ Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-        end;
-
-        local function Round(Value)
-            if MultiSlider.Rounding == 0 then
-                return math.floor(Value);
-            end;
-            return tonumber(string.format('%.' .. MultiSlider.Rounding .. 'f', Value))
-        end;
-
-function MultiSlider:GetValueFromXOffset(X, IsMin)
-            local MaxSize = IsMin and MultiSlider.MinMaxSize or MultiSlider.MaxMaxSize;
-            return Round(Library:MapValue(X, 0, MaxSize, MultiSlider.Min, MultiSlider.Max));
-        end;
-
-        function MultiSlider:SetMin(Value)
-            local Num = tonumber(Value);
-            if (not Num) then return; end;
-            
-            Num = math.clamp(Num, MultiSlider.Min, MultiSlider.MaxValue);
-            MultiSlider.MinValue = Num;
-            MultiSlider:Display();
-
-            Library:SafeCallback(MultiSlider.Callback, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-            Library:SafeCallback(MultiSlider.Changed, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-        end;
-
-        function MultiSlider:SetMax(Value)
-            local Num = tonumber(Value);
-            if (not Num) then return; end;
-            
-            Num = math.clamp(Num, MultiSlider.MinValue, MultiSlider.Max);
-            MultiSlider.MaxValue = Num;
-            MultiSlider:Display();
-
-            Library:SafeCallback(MultiSlider.Callback, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-            Library:SafeCallback(MultiSlider.Changed, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-        end;
-
-MinSlider.Inner.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                local mPos = Mouse.X;
-                local gPos = MinSlider.Fill.Size.X.Offset;
-                local Diff = mPos - (MinSlider.Fill.AbsolutePosition.X + gPos);
-
-                while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                    local nMPos = Mouse.X;
-                    local nX = math.clamp(gPos + (nMPos - mPos) + Diff, 0, MultiSlider.MinMaxSize);
-
-                    local nValue = MultiSlider:GetValueFromXOffset(nX, true);
-                    
-                    -- Don't allow min to go above max
-                    if nValue <= MultiSlider.MaxValue then
-                        MultiSlider.MinValue = nValue;
-
-                        getgenv().InstanceSetSliderFill(MinSlider.Fill, nX);
-
-                        MinSlider.Label.Text = 'Min: ' .. MultiSlider.MinValue .. (Info.Suffix or '');
-                        MinSlider.HideBorder.Visible = not (nX == MultiSlider.MaxSize or nX == 0);
-
-                        Library:SafeCallback(MultiSlider.Callback, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-                        Library:SafeCallback(MultiSlider.Changed, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-                    end;
-
-                    RenderStepped:Wait();
-                end;
-
-                Library:AttemptSave();
-            end;
-        end);
-
-MaxSlider.Inner.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                local mPos = Mouse.X;
-                local gPos = MaxSlider.Fill.Size.X.Offset;
-                local Diff = mPos - (MaxSlider.Fill.AbsolutePosition.X + gPos);
-
-                while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                    local nMPos = Mouse.X;
-                    local nX = math.clamp(gPos + (nMPos - mPos) + Diff, 0, MultiSlider.MaxMaxSize);
-
-                    local nValue = MultiSlider:GetValueFromXOffset(nX, false);
-                    
-                    -- Don't allow max to go below min
-                    if nValue >= MultiSlider.MinValue then
-                        MultiSlider.MaxValue = nValue;
-
-                        getgenv().InstanceSetSliderFill(MaxSlider.Fill, nX);
-
-                        MaxSlider.Label.Text = 'Max: ' .. MultiSlider.MaxValue .. (Info.Suffix or '');
-                        MaxSlider.HideBorder.Visible = not (nX == MultiSlider.MaxSize or nX == 0);
-
-                        Library:SafeCallback(MultiSlider.Callback, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-                        Library:SafeCallback(MultiSlider.Changed, { Min = MultiSlider.MinValue, Max = MultiSlider.MaxValue });
-                    end;
-
-                    RenderStepped:Wait();
-                end;
-
-                Library:AttemptSave();
-            end;
-        end);
-
-        MultiSlider:Display();
-        Groupbox:AddBlank(Info.BlankSize or 6);
-        Groupbox:Resize();
-
-        Options[Idx] = MultiSlider;
-
-        return MultiSlider;
-    end;
-
-    function Funcs:AddDualSlider(LeftIdx, RightIdx, LeftInfo, RightInfo)
-        assert(LeftInfo.Default, 'AddDualSlider: Missing left slider default value.');
-        assert(LeftInfo.Text, 'AddDualSlider: Missing left slider text.');
-        assert(LeftInfo.Min, 'AddDualSlider: Missing left slider minimum value.');
-        assert(LeftInfo.Max, 'AddDualSlider: Missing left slider maximum value.');
-        assert(LeftInfo.Rounding, 'AddDualSlider: Missing left slider rounding value.');
-
-        assert(RightInfo.Default, 'AddDualSlider: Missing right slider default value.');
-        assert(RightInfo.Text, 'AddDualSlider: Missing right slider text.');
-        assert(RightInfo.Min, 'AddDualSlider: Missing right slider minimum value.');
-        assert(RightInfo.Max, 'AddDualSlider: Missing right slider maximum value.');
-        assert(RightInfo.Rounding, 'AddDualSlider: Missing right slider rounding value.');
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local function CreateSliderObj(Info, Position, IsLeft)
-            local Slider = {
-                Value = Info.Default;
-                Min = Info.Min;
-                Max = Info.Max;
-                Rounding = Info.Rounding;
-                MaxSize = 0;
-                Type = 'Slider';
-                Callback = Info.Callback or function(Value) end;
-            };
-
-            local SliderOuter = Library:Create('Frame', {
-                BackgroundColor3 = Color3.new(0, 0, 0);
-                BorderColor3 = Color3.new(0, 0, 0);
-                Position = Position;
-                Size = UDim2.new(0.5, -2, 0, 13);
-                ZIndex = 5;
-            });
-
-            Library:AddToRegistry(SliderOuter, {
-                BorderColor3 = 'Black';
-            });
-
-            local SliderInner = Library:Create('Frame', {
-                BackgroundColor3 = Library.MainColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 1, 0);
-                ZIndex = 6;
-                Parent = SliderOuter;
-            });
-
-            Library:AddToRegistry(SliderInner, {
-                BackgroundColor3 = 'MainColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            SliderInner:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-                Slider.MaxSize = SliderInner.AbsoluteSize.X;
-                Slider:Display();
-            end);
-
-            local Fill = Library:Create('Frame', {
-                BackgroundColor3 = Library.AccentColor;
-                BorderColor3 = Library.AccentColorDark;
-                Size = UDim2.new(0, 0, 1, 0);
-                ZIndex = 7;
-                Parent = SliderInner;
-            });
-
-            Library:AddToRegistry(Fill, {
-                BackgroundColor3 = 'AccentColor';
-                BorderColor3 = 'AccentColorDark';
-            });
-
-            local HideBorderRight = Library:Create('Frame', {
-                BackgroundColor3 = Library.AccentColor;
-                BorderSizePixel = 0;
-                Position = UDim2.new(1, 0, 0, 0);
-                Size = UDim2.new(0, 1, 1, 0);
-                ZIndex = 8;
-                Parent = Fill;
-            });
-
-            Library:AddToRegistry(HideBorderRight, {
-                BackgroundColor3 = 'AccentColor';
-            });
-
-            local DisplayLabel = Library:CreateLabel({
-                Size = UDim2.new(1, 0, 1, 0);
-                TextSize = 14;
-                Text = '';
-                ZIndex = 9;
-                Parent = SliderInner;
-            });
-
-            Library:OnHighlight(SliderOuter, SliderOuter,
-                { BorderColor3 = 'AccentColor' },
-                { BorderColor3 = 'Black' }
-            );
-
-            if type(Info.Tooltip) == 'string' then
-                Library:AddToolTip(Info.Tooltip, SliderOuter)
-            end
-
-            function Slider:UpdateColors()
-                Fill.BackgroundColor3 = Library.AccentColor;
-                Fill.BorderColor3 = Library.AccentColorDark;
-            end;
-
-            function Slider:Display()
-                local Suffix = Info.Suffix or '';
-                DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix;
-
-                local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, Slider.MaxSize));
-                getgenv().InstanceSetSliderFill(Fill, X, HideBorderRight, Slider);
-
-                HideBorderRight.Visible = not (X == Slider.MaxSize or X == 0);
-            end;
-
-            function Slider:OnChanged(Func)
-                Slider.Changed = Func;
-                Func(Slider.Value);
-            end;
-
-            local function Round(Value)
-                if Slider.Rounding == 0 then
-                    return math.floor(Value);
-                end;
-                return tonumber(string.format('%.' .. Slider.Rounding .. 'f', Value))
-            end;
-
-            function Slider:GetValueFromXOffset(X)
-                return Round(Library:MapValue(X, 0, Slider.MaxSize, Slider.Min, Slider.Max));
-            end;
-
-            function Slider:SetValue(Str)
-                local Num = tonumber(Str);
-                if (not Num) then return; end;
-
-                Num = math.clamp(Num, Slider.Min, Slider.Max);
-                Slider.Value = Num;
-                Slider:Display();
-
-                Library:SafeCallback(Slider.Callback, Slider.Value);
-                Library:SafeCallback(Slider.Changed, Slider.Value);
-            end;
-
-            SliderInner.InputBegan:Connect(function(Input)
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                    local mPos = Mouse.X;
-                    local gPos = Fill.Size.X.Offset;
-                    local Diff = mPos - (Fill.AbsolutePosition.X + gPos);
-
-                    while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-                        local nMPos = Mouse.X;
-                        local nX = math.clamp(gPos + (nMPos - mPos) + Diff, 0, Slider.MaxSize);
-
-                        local nValue = Slider:GetValueFromXOffset(nX);
-                        local OldValue = Slider.Value;
-                        Slider.Value = nValue;
-
-                        getgenv().InstanceSetSliderFill(Fill, nX, HideBorderRight, Slider);
-
-                        local Suffix = Info.Suffix or '';
-                        DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix;
-                        HideBorderRight.Visible = not (nX == Slider.MaxSize or nX == 0);
-
-                        if nValue ~= OldValue then
-                            Library:SafeCallback(Slider.Callback, Slider.Value);
-                            Library:SafeCallback(Slider.Changed, Slider.Value);
-                        end;
-
-                        RenderStepped:Wait();
-                    end;
-
-                    Library:AttemptSave();
-                end;
-            end);
-
-            return Slider, SliderOuter, Fill, DisplayLabel, HideBorderRight;
-        end
-
-        local SliderContainer = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, -4, 0, 13);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        local LeftSlider, LeftOuter = CreateSliderObj(LeftInfo, UDim2.new(0, 0, 0, 0), true);
-        local RightSlider, RightOuter = CreateSliderObj(RightInfo, UDim2.new(0.5, 2, 0, 0), false);
-
-        LeftOuter.Parent = SliderContainer;
-        RightOuter.Parent = SliderContainer;
-
-        LeftSlider:Display();
-        RightSlider:Display();
-
-        Groupbox:AddBlank(LeftInfo.BlankSize or 6);
-        Groupbox:Resize();
-
-        Options[LeftIdx] = LeftSlider;
-        Options[RightIdx] = RightSlider;
-
-        return LeftSlider, RightSlider;
-    end;
-
-    function Funcs:AddDropdown(Idx, Info)
-        if Info.SpecialType == 'Player' then
-            Info.Values = GetPlayersString();
-            Info.AllowNull = true;
-        elseif Info.SpecialType == 'Team' then
-            Info.Values = GetTeamsString();
-            Info.AllowNull = true;
-        end;
-
-        assert(Info.Values, 'AddDropdown: Missing dropdown value list.');
-        assert(Info.AllowNull or Info.Default, 'AddDropdown: Missing default value. Pass `AllowNull` as true if this was intentional.')
-
-        if (not Info.Text) then
-            Info.Compact = true;
-        end;
-
-        local Dropdown = {
-            Values = Info.Values;
-            Value = Info.Multi and {};
-            Multi = Info.Multi;
-            Type = 'Dropdown';
-            SpecialType = Info.SpecialType; -- can be either 'Player' or 'Team'
-            Callback = Info.Callback or function(Value) end;
-        };
-
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local RelativeOffset = 0;
-
-        if not Info.Compact then
-            local DropdownLabel = Library:CreateLabel({
-                Size = UDim2.new(1, 0, 0, 10);
-                TextSize = 14;
-                Text = Info.Text;
-                TextXAlignment = Enum.TextXAlignment.Left;
-                TextYAlignment = Enum.TextYAlignment.Bottom;
-                ZIndex = 5;
-                Parent = Container;
-            });
-
-            Groupbox:AddBlank(3);
-        end
-
-        for _, Element in next, Container:GetChildren() do
-            if not Element:IsA('UIListLayout') then
-                RelativeOffset = RelativeOffset + Element.Size.Y.Offset;
-            end;
-        end;
-
-        local DropdownOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            Size = UDim2.new(1, -4, 0, 20);
-            ZIndex = 5;
-            Parent = Container;
-        });
-
-        Library:AddToRegistry(DropdownOuter, {
-            BorderColor3 = 'Black';
-        });
-
-        local DropdownInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 6;
-            Parent = DropdownOuter;
-        });
-
-        Library:AddToRegistry(DropdownInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-
-
-        local DropdownArrow = Library:Create('ImageLabel', {
-            AnchorPoint = Vector2.new(0, 0.5);
-            BackgroundTransparency = 1;
-            Position = UDim2.new(1, -16, 0.5, 0);
-            Size = UDim2.new(0, 12, 0, 12);
-            Image = 'http://www.roblox.com/asset/?id=6282522798';
-            ImageColor3 = Library.AccentColor;
-            ZIndex = 8;
-            Parent = DropdownInner;
-        });
-
-        Library:AddToRegistry(DropdownArrow, {
-            ImageColor3 = 'AccentColor';
-        });
-
-        local ItemList = Library:CreateLabel({
-            Position = UDim2.new(0, 5, 0, 0);
-            Size = UDim2.new(1, -5, 1, 0);
-            TextSize = 14;
-            Text = '--';
-            TextXAlignment = Enum.TextXAlignment.Left;
-            TextWrapped = true;
-            ZIndex = 7;
-            Parent = DropdownInner;
-        });
-
-        Library:OnHighlight(DropdownOuter, DropdownOuter,
-            { BorderColor3 = 'AccentColor' },
-            { BorderColor3 = 'Black' }
-        );
-
-        if type(Info.Tooltip) == 'string' then
-            Library:AddToolTip(Info.Tooltip, DropdownOuter)
-        end
-
-        local MAX_DROPDOWN_ITEMS = 8;
-
-local ListOuter = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
-            ZIndex = 20;
-            Visible = false;
-            Parent = ScreenGui;
-        });
-
-local function RecalculateListPosition()
-    if ListOuter.Visible then
-        ListOuter.Position = UDim2.fromOffset(DropdownOuter.AbsolutePosition.X, DropdownOuter.AbsolutePosition.Y + DropdownOuter.AbsoluteSize.Y + 1);
-    end
-end;
-
-local function RecalculateListSize(YSize)
-    if ListOuter.Visible or YSize then
-        ListOuter.Size = UDim2.fromOffset(DropdownOuter.AbsoluteSize.X, YSize or (MAX_DROPDOWN_ITEMS * 20 + 2))
-    end
-end;
-
-RecalculateListSize();
-
-DropdownOuter:GetPropertyChangedSignal('AbsolutePosition'):Connect(RecalculateListPosition);
-DropdownOuter:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-    RecalculateListPosition();
-    RecalculateListSize();
-end);
-
-local ListInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 21;
-            Parent = ListOuter;
-        });
-
-Library:AddToRegistry(ListInner, {
-            BackgroundColor3 = 'BackgroundColor';
-            BorderColor3 = 'OutlineColor';
-        });
-
-        local Scrolling = Library:Create('ScrollingFrame', {
-            BackgroundTransparency = 1;
-            BorderSizePixel = 0;
-            CanvasSize = UDim2.new(0, 0, 0, 0);
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 21;
-            Parent = ListInner;
-
-            TopImage = 'rbxasset://textures/ui/Scroll/scroll-middle.png',
-            BottomImage = 'rbxasset://textures/ui/Scroll/scroll-middle.png',
-
-            ScrollBarThickness = 3,
-            ScrollBarImageColor3 = Library.AccentColor,
-        });
-
-        Library:AddToRegistry(Scrolling, {
-            ScrollBarImageColor3 = 'AccentColor'
-        })
-
-        Library:Create('UIListLayout', {
-            Padding = UDim.new(0, 0);
-            FillDirection = Enum.FillDirection.Vertical;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            Parent = Scrolling;
-        });
-
-        function Dropdown:Display()
-            local Values = Dropdown.Values;
-            local Str = '';
-
-            if Info.Multi then
-                for Idx, Value in next, Values do
-                    if Dropdown.Value[Value] then
-                        Str = Str .. Value .. ', ';
-                    end;
-                end;
-
-                Str = Str:sub(1, #Str - 2);
-            else
-                Str = Dropdown.Value or '';
-            end;
-
-            ItemList.Text = (Str == '' and '--' or Str);
-        end;
-
-        function Dropdown:GetActiveValues()
-            if Info.Multi then
-                local T = {};
-
-                for Value, Bool in next, Dropdown.Value do
-                    table.insert(T, Value);
-                end;
-
-                return T;
-            else
-                return Dropdown.Value and 1 or 0;
-            end;
-        end;
-
-        function Dropdown:BuildDropdownList()
-            local Values = Dropdown.Values;
-            local Buttons = {};
-
-            for _, Element in next, Scrolling:GetChildren() do
-                if not Element:IsA('UIListLayout') then
-                    Element:Destroy();
-                end;
-            end;
-
-            local Count = 0;
-
-            for Idx, Value in next, Values do
-                local Table = {};
-
-                Count = Count + 1;
-
-                local Button = Library:Create('Frame', {
-                    BackgroundColor3 = Library.MainColor;
-                    BorderColor3 = Library.OutlineColor;
-                    BorderMode = Enum.BorderMode.Middle;
-                    Size = UDim2.new(1, -1, 0, 20);
-                    ZIndex = 23;
-                    Active = true,
-                    Parent = Scrolling;
-                });
-
-                Library:AddToRegistry(Button, {
-                    BackgroundColor3 = 'MainColor';
-                    BorderColor3 = 'OutlineColor';
-                });
-
-Library:Create('UICorner', {
-                    CornerRadius = UDim.new(0, 4);
-                    Parent = Button;
-                });
-
-
-                local ButtonLabel = Library:CreateLabel({
-                    Active = false;
-                    Size = UDim2.new(1, -6, 1, 0);
-                    Position = UDim2.new(0, 6, 0, 0);
-                    TextSize = 14;
-                    Text = Value;
-                    TextXAlignment = Enum.TextXAlignment.Left;
-                    ZIndex = 25;
-                    Parent = Button;
-                });
-
-                Library:OnHighlight(Button, Button,
-                    { BorderColor3 = 'AccentColor', ZIndex = 24 },
-                    { BorderColor3 = 'OutlineColor', ZIndex = 23 }
-                );
-
-                local Selected;
-
-                if Info.Multi then
-                    Selected = Dropdown.Value[Value];
-                else
-                    Selected = Dropdown.Value == Value;
-                end;
-
-                function Table:UpdateButton()
-                    if Info.Multi then
-                        Selected = Dropdown.Value[Value];
-                    else
-                        Selected = Dropdown.Value == Value;
-                    end;
-
-                    ButtonLabel.TextColor3 = Selected and Library.AccentColor or Library.FontColor;
-                    Library.RegistryMap[ButtonLabel].Properties.TextColor3 = Selected and 'AccentColor' or 'FontColor';
-                end;
-
-                ButtonLabel.InputBegan:Connect(function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        local Try = not Selected;
-
-                        if Dropdown:GetActiveValues() == 1 and (not Try) and (not Info.AllowNull) then
-                        else
-                            if Info.Multi then
-                                Selected = Try;
-
-                                if Selected then
-                                    Dropdown.Value[Value] = true;
-                                else
-                                    Dropdown.Value[Value] = nil;
-                                end;
-                            else
-                                Selected = Try;
-
-                                if Selected then
-                                    Dropdown.Value = Value;
-                                else
-                                    Dropdown.Value = nil;
-                                end;
-
-                                for _, OtherButton in next, Buttons do
-                                    OtherButton:UpdateButton();
-                                end;
-                            end;
-
-                            Table:UpdateButton();
-                            Dropdown:Display();
-
-                            Library:SafeCallback(Dropdown.Callback, Dropdown.Value);
-                            Library:SafeCallback(Dropdown.Changed, Dropdown.Value);
-
-                            Library:AttemptSave();
-                        end;
-                    end;
-                end);
-
-                Table:UpdateButton();
-                Dropdown:Display();
-
-                Buttons[Button] = Table;
-            end;
-
-            Scrolling.CanvasSize = UDim2.fromOffset(0, (Count * 20) + 1);
-
-            local Y = math.clamp(Count * 20, 0, MAX_DROPDOWN_ITEMS * 20) + 1;
-            RecalculateListSize(Y);
-        end;
-
-        function Dropdown:SetValues(NewValues)
-            if NewValues then
-                Dropdown.Values = NewValues;
-            end;
-
-            Dropdown:BuildDropdownList();
-        end;
-
-function Dropdown:OpenDropdown()
-    ListOuter.Visible = true;
-    Library.OpenedFrames[ListOuter] = true;
-    
-    RecalculateListPosition();
-    RecalculateListSize();
-    
-    TweenService:Create(DropdownArrow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Rotation = 180
-    }):Play();
-end;
-
-function Dropdown:CloseDropdown()
-    TweenService:Create(DropdownArrow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Rotation = 0
-    }):Play();
-    
-    task.wait(0.2);
-    ListOuter.Visible = false;
-    Library.OpenedFrames[ListOuter] = nil;
-end;
-
-        function Dropdown:OnChanged(Func)
-            Dropdown.Changed = Func;
-            Func(Dropdown.Value);
-        end;
-
-        function Dropdown:SetValue(Val)
-            if Dropdown.Multi then
-                local nTable = {};
-
-                for Value, Bool in next, Val do
-                    if table.find(Dropdown.Values, Value) then
-                        nTable[Value] = true
-                    end;
-                end;
-
-                Dropdown.Value = nTable;
-            else
-                if (not Val) then
-                    Dropdown.Value = nil;
-                elseif table.find(Dropdown.Values, Val) then
-                    Dropdown.Value = Val;
-                end;
-            end;
-
-            Dropdown:BuildDropdownList();
-
-            Library:SafeCallback(Dropdown.Callback, Dropdown.Value);
-            Library:SafeCallback(Dropdown.Changed, Dropdown.Value);
-        end;
-
-        DropdownOuter.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                if ListOuter.Visible then
-                    Dropdown:CloseDropdown();
-                else
-                    Dropdown:OpenDropdown();
-                end;
-            end;
-        end);
-
-        InputService.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local AbsPos, AbsSize = ListOuter.AbsolutePosition, ListOuter.AbsoluteSize;
-
-                if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X
-                    or Mouse.Y < (AbsPos.Y - 20 - 1) or Mouse.Y > AbsPos.Y + AbsSize.Y then
-
-                    Dropdown:CloseDropdown();
-                end;
-            end;
-        end);
-
-        Dropdown:BuildDropdownList();
-        Dropdown:Display();
-
-        local Defaults = {}
-
-        if type(Info.Default) == 'string' then
-            local Idx = table.find(Dropdown.Values, Info.Default)
-            if Idx then
-                table.insert(Defaults, Idx)
-            end
-        elseif type(Info.Default) == 'table' then
-            for _, Value in next, Info.Default do
-                local Idx = table.find(Dropdown.Values, Value)
-                if Idx then
-                    table.insert(Defaults, Idx)
-                end
-            end
-        elseif type(Info.Default) == 'number' and Dropdown.Values[Info.Default] ~= nil then
-            table.insert(Defaults, Info.Default)
-        end
-
-        if next(Defaults) then
-            for i = 1, #Defaults do
-                local Index = Defaults[i]
-                if Info.Multi then
-                    Dropdown.Value[Dropdown.Values[Index]] = true
-                else
-                    Dropdown.Value = Dropdown.Values[Index];
-                end
-
-                if (not Info.Multi) then break end
-            end
-
-            Dropdown:BuildDropdownList();
-            Dropdown:Display();
-        end
-
-        Groupbox:AddBlank(Info.BlankSize or 5);
-        Groupbox:Resize();
-
-        Options[Idx] = Dropdown;
-
-        return Dropdown;
-    end;
-
-    function Funcs:AddDependencyBox()
-        local Depbox = {
-            Dependencies = {};
-        };
-        
-        local Groupbox = self;
-        local Container = Groupbox.Container;
-
-        local Holder = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, 0, 0, 0);
-            Visible = false;
-            Parent = Container;
-        });
-
-        local Frame = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            Size = UDim2.new(1, 0, 1, 0);
-            Visible = true;
-            Parent = Holder;
-        });
-
-        local Layout = Library:Create('UIListLayout', {
-            FillDirection = Enum.FillDirection.Vertical;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            Parent = Frame;
-        });
-
-        function Depbox:Resize()
-            Holder.Size = UDim2.new(1, 0, 0, Layout.AbsoluteContentSize.Y);
-            Groupbox:Resize();
-        end;
-
-        Layout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
-            Depbox:Resize();
-        end);
-
-        Holder:GetPropertyChangedSignal('Visible'):Connect(function()
-            Depbox:Resize();
-        end);
-
-        function Depbox:Update()
-            for _, Dependency in next, Depbox.Dependencies do
-                local Elem = Dependency[1];
-                local Value = Dependency[2];
-
-                if Elem.Type == 'Toggle' and Elem.Value ~= Value then
-                    Holder.Visible = false;
-                    Depbox:Resize();
-                    return;
-                end;
-            end;
-
-            Holder.Visible = true;
-            Depbox:Resize();
-        end;
-
-        function Depbox:SetupDependencies(Dependencies)
-            for _, Dependency in next, Dependencies do
-                assert(type(Dependency) == 'table', 'SetupDependencies: Dependency is not of type `table`.');
-                assert(Dependency[1], 'SetupDependencies: Dependency is missing element argument.');
-                assert(Dependency[2] ~= nil, 'SetupDependencies: Dependency is missing value argument.');
-            end;
-
-            Depbox.Dependencies = Dependencies;
-            Depbox:Update();
-        end;
-
-        Depbox.Container = Frame;
-
-        setmetatable(Depbox, BaseGroupbox);
-
-        table.insert(Library.DependencyBoxes, Depbox);
-
-        return Depbox;
-    end;
-
-    BaseGroupbox.__index = Funcs;
-    BaseGroupbox.__namecall = function(Table, Key, ...)
-        return Funcs[Key](...);
-    end;
-end;
-
--- < Create other UI elements >
-do
-    Library.NotificationArea = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        Position = UDim2.new(0, 0, 0, 40);
-        Size = UDim2.new(0, 300, 0, 200);
-        ZIndex = 100;
-        Parent = ScreenGui;
-    });
-
-    Library:Create('UIListLayout', {
-        Padding = UDim.new(0, 4);
-        FillDirection = Enum.FillDirection.Vertical;
-        SortOrder = Enum.SortOrder.LayoutOrder;
-        Parent = Library.NotificationArea;
-    });
-
-    local WatermarkOuter = Library:Create('Frame', {
-        AnchorPoint = Vector2.new(0.5, 0);
-        BorderColor3 = Color3.new(0, 0, 0);
-        Position = UDim2.new(0.5, 0, 0, 10);
-        Size = UDim2.new(0, 213, 0, 20);
-        ZIndex = 200;
-        Visible = false;
-        Parent = ScreenGui;
-    });
-
-    local WatermarkInner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.AccentColor;
-        BorderMode = Enum.BorderMode.Inset;
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 201;
-        Parent = WatermarkOuter;
-    });
-
-    Library:AddToRegistry(WatermarkInner, {
-        BorderColor3 = 'AccentColor';
-    });
-
-    local InnerFrame = Library:Create('Frame', {
-        BackgroundColor3 = Color3.new(1, 1, 1);
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 1, 0, 1);
-        Size = UDim2.new(1, -2, 1, -2);
-        ZIndex = 202;
-        Parent = WatermarkInner;
-    });
-
-    local Gradient = Library:Create('UIGradient', {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-            ColorSequenceKeypoint.new(1, Library.MainColor),
-        });
-        Rotation = -90;
-        Parent = InnerFrame;
-    });
-
-    Library:AddToRegistry(Gradient, {
-        Color = function()
-            return ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-                ColorSequenceKeypoint.new(1, Library.MainColor),
-            });
-        end
-    });
-
-    local WatermarkLabel = Library:CreateLabel({
-        Position = UDim2.new(0, 5, 0, 0);
-        Size = UDim2.new(1, -4, 1, 0);
-        TextSize = 14;
-        TextXAlignment = Enum.TextXAlignment.Left;
-        ZIndex = 203;
-        Parent = InnerFrame;
-    });
-
-    Library.Watermark = WatermarkOuter;
-    Library.WatermarkText = WatermarkLabel;
-    Library:MakeDraggable(Library.Watermark);
-
-
-
-    local KeybindOuter = Library:Create('Frame', {
-        AnchorPoint = Vector2.new(0, 0.5);
-        BorderColor3 = Color3.new(0, 0, 0);
-        Position = UDim2.new(0, 10, 0.5, 0);
-        Size = UDim2.new(0, 210, 0, 20);
-        Visible = false;
-        ZIndex = 100;
-        Parent = ScreenGui;
-    });
-
-    local KeybindInner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        BorderMode = Enum.BorderMode.Inset;
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 101;
-        Parent = KeybindOuter;
-    });
-
-    Library:AddToRegistry(KeybindInner, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    }, true);
-
-    local ColorFrame = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
-        BorderSizePixel = 0;
-        Size = UDim2.new(1, 0, 0, 2);
-        ZIndex = 102;
-        Parent = KeybindInner;
-    });
-
-    Library:AddToRegistry(ColorFrame, {
-        BackgroundColor3 = 'AccentColor';
-    }, true);
-
-    local KeybindLabel = Library:CreateLabel({
-        Size = UDim2.new(1, 0, 0, 20);
-        Position = UDim2.fromOffset(5, 2),
-        TextXAlignment = Enum.TextXAlignment.Left,
-
-        Text = 'Keybinds';
-        ZIndex = 104;
-        Parent = KeybindInner;
-    });
-
-    local KeybindContainer = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        Size = UDim2.new(1, 0, 1, -20);
-        Position = UDim2.new(0, 0, 0, 20);
-        ZIndex = 1;
-        Parent = KeybindInner;
-    });
-
-    Library:Create('UIListLayout', {
-        FillDirection = Enum.FillDirection.Vertical;
-        SortOrder = Enum.SortOrder.LayoutOrder;
-        Parent = KeybindContainer;
-    });
-
-    Library:Create('UIPadding', {
-        PaddingLeft = UDim.new(0, 5),
-        Parent = KeybindContainer,
-    })
-
-    Library.KeybindFrame = KeybindOuter;
-    Library.KeybindContainer = KeybindContainer;
-    Library:MakeDraggable(KeybindOuter);
-end;
-
-function Library:SetWatermarkVisibility(Bool)
-    Library.Watermark.Visible = Bool;
-end;
-
-function Library:SetWatermark(Text)
-    local X, Y = Library:GetTextBounds(Text, Library.Font, 14);
-    Library.Watermark.Size = UDim2.new(0, X + 15, 0, (Y * 1.5) + 3);
-    Library:SetWatermarkVisibility(true)
-
-    Library.WatermarkText.Text = Text;
-end;
-
-function Library:Notify(Text, Time)
-    local XSize, YSize = Library:GetTextBounds(Text, Library.Font, 14);
-
-    YSize = YSize + 7
-
-    local NotifyOuter = Library:Create('Frame', {
-        BorderColor3 = Color3.new(0, 0, 0);
-        Position = UDim2.new(0, 100, 0, 10);
-        Size = UDim2.new(0, 0, 0, YSize);
-        ClipsDescendants = true;
-        ZIndex = 100;
-        Parent = Library.NotificationArea;
-    });
-
-    local NotifyInner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        BorderMode = Enum.BorderMode.Inset;
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 101;
-        Parent = NotifyOuter;
-    });
-
-    Library:AddToRegistry(NotifyInner, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    }, true);
-
-    local InnerFrame = Library:Create('Frame', {
-        BackgroundColor3 = Color3.new(1, 1, 1);
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 1, 0, 1);
-        Size = UDim2.new(1, -2, 1, -2);
-        ZIndex = 102;
-        Parent = NotifyInner;
-    });
-
-    local Gradient = Library:Create('UIGradient', {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-            ColorSequenceKeypoint.new(1, Library.MainColor),
-        });
-        Rotation = -90;
-        Parent = InnerFrame;
-    });
-
-    Library:AddToRegistry(Gradient, {
-        Color = function()
-            return ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-                ColorSequenceKeypoint.new(1, Library.MainColor),
-            });
-        end
-    });
-
-    local NotifyLabel = Library:CreateLabel({
-        Position = UDim2.new(0, 4, 0, 0);
-        Size = UDim2.new(1, -4, 1, 0);
-        Text = Text;
-        TextXAlignment = Enum.TextXAlignment.Left;
-        TextSize = 14;
-        ZIndex = 103;
-        Parent = InnerFrame;
-    });
-
-    local LeftColor = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, -1, 0, -1);
-        Size = UDim2.new(0, 3, 1, 2);
-        ZIndex = 104;
-        Parent = NotifyOuter;
-    });
-
-    Library:AddToRegistry(LeftColor, {
-        BackgroundColor3 = 'AccentColor';
-    }, true);
-
-    pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, XSize + 8 + 4, 0, YSize), 'Out', 'Quad', 0.4, true);
-
-    task.spawn(function()
-        wait(Time or 5);
-
-        pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, 0, 0, YSize), 'Out', 'Quad', 0.4, true);
-
-        wait(0.4);
-
-        NotifyOuter:Destroy();
-    end);
-end;
-
-function Library:CreateWindow(...)
-    local Arguments = { ... }
-    local Config = { AnchorPoint = Vector2.zero }
-
-    if type(...) == 'table' then
-        Config = ...;
-    else
-        Config.Title = Arguments[1]
-        Config.AutoShow = Arguments[2] or false;
-    end
-
-    if type(Config.Title) ~= 'string' then Config.Title = 'No title' end
-    if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 0 end
-    if type(Config.MenuFadeTime) ~= 'number' then Config.MenuFadeTime = 0.2 end
-
-    if typeof(Config.Position) ~= 'UDim2' then Config.Position = UDim2.fromOffset(175, 50) end
-    if typeof(Config.Size) ~= 'UDim2' then Config.Size = UDim2.fromOffset(700, 600) end
-
-    if Config.Center then
-        Config.AnchorPoint = Vector2.new(0.5, 0.5)
-        Config.Position = UDim2.fromScale(0.5, 0.5)
-    end
-
-    Library.UISize = Config.Size;
-
-    local Window = {
-        Tabs = {};
-    };
-
-    local Outer = Library:Create('Frame', {
-        AnchorPoint = Config.AnchorPoint,
-        BackgroundColor3 = Color3.new(0, 0, 0);
-        BorderSizePixel = 0;
-        Position = Config.Position,
-        Size = Config.Size,
-        Visible = false;
-        ZIndex = 1;
-        Parent = ScreenGui;
-    });
-
-    Library:MakeDraggable(Outer, 25);
-
-    -- Resize areas
-local MinSize = Vector2.new(400, 300);
-local MaxSize = Vector2.new(1000, 800);
-
--- Bottom-right corner resize
-local ResizeCorner = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -15, 1, -15);
-    Size = UDim2.new(0, 15, 0, 15);
-    ZIndex = 999;
-    Parent = Outer;
-});
-
--- Bottom edge resize
-local ResizeBottom = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(0, 15, 1, -5);
-    Size = UDim2.new(1, -30, 0, 5);
-    ZIndex = 999;
-    Parent = Outer;
-});
-
--- Right edge resize
-local ResizeRight = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -5, 0, 15);
-    Size = UDim2.new(0, 5, 1, -30);
-    ZIndex = 999;
-    Parent = Outer;
-});
-
-ResizeCorner.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local StartSize = Outer.AbsoluteSize;
-        local StartPos = Vector2.new(Mouse.X, Mouse.Y);
-
-        while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-            local Delta = Vector2.new(Mouse.X - StartPos.X, Mouse.Y - StartPos.Y);
-            local NewSize = Vector2.new(
-                math.clamp(StartSize.X + Delta.X, MinSize.X, MaxSize.X),
-                math.clamp(StartSize.Y + Delta.Y, MinSize.Y, MaxSize.Y)
-            );
-
-            Outer.Size = UDim2.fromOffset(NewSize.X, NewSize.Y);
-
-            RenderStepped:Wait();
-        end;
-    end;
-end);
-
-ResizeBottom.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local StartSize = Outer.AbsoluteSize;
-        local StartPos = Mouse.Y;
-
-        while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-            local Delta = Mouse.Y - StartPos;
-            local NewHeight = math.clamp(StartSize.Y + Delta, MinSize.Y, MaxSize.Y);
-
-            Outer.Size = UDim2.fromOffset(Outer.AbsoluteSize.X, NewHeight);
-
-            RenderStepped:Wait();
-        end;
-    end;
-end);
-
-ResizeRight.InputBegan:Connect(function(Input)
-    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local StartSize = Outer.AbsoluteSize;
-        local StartPos = Mouse.X;
-
-        while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-            local Delta = Mouse.X - StartPos;
-            local NewWidth = math.clamp(StartSize.X + Delta, MinSize.X, MaxSize.X);
-
-            Outer.Size = UDim2.fromOffset(NewWidth, Outer.AbsoluteSize.Y);
-
-            RenderStepped:Wait();
-        end;
-    end;
-end);
-
-    local Inner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        BorderMode = Enum.BorderMode.Inset;
-        Position = UDim2.new(0, 1, 0, 1);
-        Size = UDim2.new(1, -2, 1, -2);
-        ZIndex = 1;
-        Parent = Outer;
-    });
-
-    Library:AddToRegistry(Inner, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    });
-
-    local function ColorToHex(Color)
-        return string.format("#%.2X%.2X%.2X", math.floor(Color.R * 255), math.floor(Color.G * 255), math.floor(Color.B * 255))
-    end
-
-    local function GetRichTitle(Text)
-        local parts = string.split(Text, "|")
-        if #parts >= 2 then
-            local p1 = string.gsub(parts[1], "^%s*(.-)%s*$", "%1")
-            local p2 = string.gsub(parts[2], "^%s*(.-)%s*$", "%1")
-            local accentHex = ColorToHex(Library.AccentColor)
-            local dimAccent = ColorToHex(Color3.new(Library.AccentColor.R * 0.6, Library.AccentColor.G * 0.6, Library.AccentColor.B * 0.6))
-            return string.format("<font color='%s'>%s</font> <font color='#555555'>|</font> <font color='%s'>%s</font>", accentHex, p1, dimAccent, p2)
-        end
-        return Text
-    end
-
-local WindowLabel = Library:CreateLabel({
-    Position = UDim2.new(0, 12, 0, 0);
-    Size = UDim2.new(0, 300, 0, 30);
-    Text = GetRichTitle(Config.Title or '');
-    RichText = true;
-    TextXAlignment = Enum.TextXAlignment.Left;
-    ZIndex = 2;
-    Parent = Inner;
-});
-
-Library:AddToRegistry(WindowLabel, {
-    Text = function()
-        return GetRichTitle(Config.Title or '')
-    end
-});
-
-    local DividerLine = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 8, 0, 30);
-        Size = UDim2.new(1, -16, 0, 1);
-        ZIndex = 5;
-        Parent = Inner;
-    });
-
-    Library:AddToRegistry(DividerLine, {
-        BackgroundColor3 = 'AccentColor';
-    });
-
-    local MainSectionOuter = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 8, 0, 35);
-        Size = UDim2.new(1, -16, 1, -43);
-        ZIndex = 1;
-        Parent = Inner;
-    });
-
-    local MainSectionInner = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 0, 0, 0);
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 1;
-        Parent = MainSectionOuter;
-    });
-
-local TabArea = Library:Create('Frame', {
-    BackgroundTransparency = 1;
-    Position = UDim2.new(1, -320, 0, 7);
-    Size = UDim2.new(0, 310, 0, 21);
-    ZIndex = 5;
-    Parent = Inner;
-});
-
-    local TabListLayout = Library:Create('UIListLayout', {
-        Padding = UDim.new(0, Config.TabPadding == 0 and 12 or Config.TabPadding);
-        FillDirection = Enum.FillDirection.Horizontal;
-        HorizontalAlignment = Enum.HorizontalAlignment.Right;
-        SortOrder = Enum.SortOrder.LayoutOrder;
-        Parent = TabArea;
-    });
-
-    local TabContainer = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        BorderSizePixel = 0;
-        Position = UDim2.new(0, 0, 0, 0);
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 2;
-        Parent = MainSectionInner;
-    });
-
-function Window:SetWindowTitle(Title)
-    Config.Title = Title
-    WindowLabel.Text = GetRichTitle(Title or '')
-end;
-
-    function Window:AddTab(Name)
-        local Tab = {
-            Groupboxes = {};
-            Tabboxes = {};
-        };
-
-        local TabButtonWidth = Library:GetTextBounds(Name, Library.Font, 14);
-
-        local TabButton = Library:Create('TextButton', {
-            BackgroundTransparency = 1;
-            BorderSizePixel = 0;
-            Size = UDim2.new(0, TabButtonWidth + 8, 1, 0);
-            Text = "";
-            ZIndex = 5;
-            Parent = TabArea;
-        });
-
-        local TabFrame;
-
-        local TabButtonLabel = Library:CreateLabel({
-            Position = UDim2.new(0, 0, 0, 0);
-            Size = UDim2.new(1, 0, 1, 0);
-            Text = Name;
-            TextSize = 14;
-            TextColor3 = Color3.fromRGB(150, 150, 150);
-            ZIndex = 6;
-            Parent = TabButton;
-        });
-
-        Library:AddToRegistry(TabButtonLabel, {
-            TextColor3 = function()
-                return TabFrame.Visible and Library.AccentColor or Color3.fromRGB(150, 150, 150)
-            end
-        });
-
-        local Blocker = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            BorderSizePixel = 0;
-            Visible = false;
-            Parent = TabButton;
-        });
-
-        TabFrame = Library:Create('Frame', {
-            Name = 'TabFrame',
-            BackgroundTransparency = 1;
-            Position = UDim2.new(0, 0, 0, 0);
-            Size = UDim2.new(1, 0, 1, 0);
-            Visible = false;
-            ZIndex = 2;
-            Parent = TabContainer;
-        });
-
-local LeftSide = Library:Create('ScrollingFrame', {
-            BackgroundTransparency = 1;
-            BorderSizePixel = 0;
-            Position = UDim2.new(0, 8, 0, 8);
-            Size = UDim2.new(0.5, -12, 1, -16);
-            CanvasSize = UDim2.new(0, 0, 0, 0);
-            BottomImage = '';
-            TopImage = '';
-            ScrollBarThickness = 0;
-            ZIndex = 2;
-            Parent = TabFrame;
-        });
-
-        local RightSide = Library:Create('ScrollingFrame', {
-            BackgroundTransparency = 1;
-            BorderSizePixel = 0;
-            Position = UDim2.new(0.5, 4, 0, 8);
-            Size = UDim2.new(0.5, -12, 1, -16);
-            CanvasSize = UDim2.new(0, 0, 0, 0);
-            BottomImage = '';
-            TopImage = '';
-            ScrollBarThickness = 0;
-            ZIndex = 2;
-            Parent = TabFrame;
-        });
-
-        Library:Create('UIPadding', {
-            PaddingTop = UDim.new(0, 10);
-            PaddingBottom = UDim.new(0, 10);
-            Parent = LeftSide;
-        });
-
-        Library:Create('UIPadding', {
-            PaddingTop = UDim.new(0, 10);
-            PaddingBottom = UDim.new(0, 10);
-            Parent = RightSide;
-        });
-
-        Library:Create('UIListLayout', {
-            Padding = UDim.new(0, 8);
-            FillDirection = Enum.FillDirection.Vertical;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            HorizontalAlignment = Enum.HorizontalAlignment.Center;
-            Parent = LeftSide;
-        });
-
-        Library:Create('UIListLayout', {
-            Padding = UDim.new(0, 8);
-            FillDirection = Enum.FillDirection.Vertical;
-            SortOrder = Enum.SortOrder.LayoutOrder;
-            HorizontalAlignment = Enum.HorizontalAlignment.Center;
-            Parent = RightSide;
-        });
-
-        for _, Side in next, { LeftSide, RightSide } do
-            Side:WaitForChild('UIListLayout'):GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
-                Side.CanvasSize = UDim2.fromOffset(0, Side.UIListLayout.AbsoluteContentSize.Y + 20);
-            end);
-        end;
-
-function Tab:ShowTab()
-    for _, Tab in next, Window.Tabs do
-        Tab:HideTab();
-    end;
-
-    TabFrame.Visible = true;
-    TabButtonLabel.TextColor3 = Library.AccentColor;
-    Library:UpdateColorsUsingRegistry();
-end;
-
-function Tab:HideTab()
-    TabFrame.Visible = false;
-    TabButtonLabel.TextColor3 = Color3.fromRGB(150, 150, 150);
-end;
-
-        function Tab:SetLayoutOrder(Position)
-            TabButton.LayoutOrder = Position;
-            TabListLayout:ApplyLayout();
-        end;
-
-        function Tab:AddGroupbox(Info)
-            local Groupbox = {};
-
-            local BoxOuter = Library:Create('Frame', {
-                BackgroundColor3 = Library.BackgroundColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 0, 507 + 2);
-                ZIndex = 2;
-                Parent = Info.Side == 1 and LeftSide or RightSide;
-            });
-
-            Library:AddToRegistry(BoxOuter, {
-                BackgroundColor3 = 'BackgroundColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            local BoxInner = Library:Create('Frame', {
-                BackgroundColor3 = Library.BackgroundColor;
-                BorderSizePixel = 0;
-                Size = UDim2.new(1, -2, 1, -2);
-                Position = UDim2.new(0, 1, 0, 1);
-                ZIndex = 4;
-                Parent = BoxOuter;
-            });
-
-            Library:AddToRegistry(BoxInner, {
-                BackgroundColor3 = 'BackgroundColor';
-            });
-
-            local Highlight = Library:Create('Frame', {
-                BackgroundTransparency = 1;
-                BorderSizePixel = 0;
-                Size = UDim2.new(0, 0, 0, 0);
-                Visible = false;
-                Parent = BoxInner;
-            });
-
-            Library:AddToRegistry(Highlight, {
-                BackgroundColor3 = 'AccentColor';
-            });
-
-            local TextWidth = Library:GetTextBounds(Info.Name, Library.Font, 14);
-            local GroupboxLabel = Library:CreateLabel({
-                Size = UDim2.new(0, TextWidth + 8, 0, 14);
-                Position = UDim2.new(0, 12, 0, -8);
-                TextSize = 14;
-                Text = Info.Name;
-                TextXAlignment = Enum.TextXAlignment.Center;
-                BackgroundColor3 = Library.BackgroundColor;
-                BackgroundTransparency = 0;
-                BorderSizePixel = 0;
-                ZIndex = 5;
-                Parent = BoxOuter;
-            });
-
-            Library:AddToRegistry(GroupboxLabel, {
-                TextColor3 = 'FontColor';
-                BackgroundColor3 = 'BackgroundColor';
-            });
-
-            local Container = Library:Create('Frame', {
-                BackgroundTransparency = 1;
-                Position = UDim2.new(0, 8, 0, 10);
-                Size = UDim2.new(1, -16, 1, -20);
-                ZIndex = 1;
-                Parent = BoxInner;
-            });
-
-            Library:Create('UIListLayout', {
-                FillDirection = Enum.FillDirection.Vertical;
-                SortOrder = Enum.SortOrder.LayoutOrder;
-                Parent = Container;
-            });
-
-            function Groupbox:Resize()
-                local Size = 0;
-
-                for _, Element in next, Groupbox.Container:GetChildren() do
-                    if (not Element:IsA('UIListLayout')) and Element.Visible then
-                        Size = Size + Element.Size.Y.Offset;
-                    end;
-                end;
-
-                BoxOuter.Size = UDim2.new(1, 0, 0, 10 + Size + 10);
-            end;
-
-            local Groupboxes = Tab.Groupboxes;
-            function Groupbox:Remove()
-                table.clear(self);
-                BoxOuter:Destroy();
-                Groupboxes[Info.Name] = nil;
-            end;
-
-            Groupbox.Container = Container;
-            setmetatable(Groupbox, BaseGroupbox);
-
-            Groupbox:AddBlank(3);
-            Groupbox:Resize();
-
-            Groupboxes[Info.Name] = Groupbox;
-            return Groupbox;
-        end;
-
-        function Tab:AddLeftGroupbox(Name)
-            return Tab:AddGroupbox({ Side = 1; Name = Name; });
-        end;
-
-        function Tab:AddRightGroupbox(Name)
-            return Tab:AddGroupbox({ Side = 2; Name = Name; });
-        end;
-
-        function Tab:AddTabbox(Info)
-            local Tabbox = {
-                Tabs = {};
-            };
-
-            local BoxOuter = Library:Create('Frame', {
-                BackgroundColor3 = Library.BackgroundColor;
-                BorderColor3 = Library.OutlineColor;
-                BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 0, 0);
-                ZIndex = 2;
-                Parent = Info.Side == 1 and LeftSide or RightSide;
-            });
-
-            Library:AddToRegistry(BoxOuter, {
-                BackgroundColor3 = 'BackgroundColor';
-                BorderColor3 = 'OutlineColor';
-            });
-
-            local BoxInner = Library:Create('Frame', {
-                BackgroundColor3 = Library.BackgroundColor;
-                BorderSizePixel = 0;
-                Size = UDim2.new(1, -2, 1, -2);
-                Position = UDim2.new(0, 1, 0, 1);
-                ZIndex = 4;
-                Parent = BoxOuter;
-            });
-
-            Library:AddToRegistry(BoxInner, {
-                BackgroundColor3 = 'BackgroundColor';
-            });
-
-            local Highlight = Library:Create('Frame', {
-                BackgroundTransparency = 1;
-                BorderSizePixel = 0;
-                Size = UDim2.new(0, 0, 0, 0);
-                Visible = false;
-                Parent = BoxInner;
-            });
-
-            Library:AddToRegistry(Highlight, {
-                BackgroundColor3 = 'AccentColor';
-            });
-
-            local TabboxButtons = Library:Create('Frame', {
-                BackgroundTransparency = 1;
-                Position = UDim2.new(0, 0, 0, 1);
-                Size = UDim2.new(1, 0, 0, 18);
-                ZIndex = 5;
-                Parent = BoxInner;
-            });
-
-            Library:Create('UIListLayout', {
-                FillDirection = Enum.FillDirection.Horizontal;
-                HorizontalAlignment = Enum.HorizontalAlignment.Left;
-                SortOrder = Enum.SortOrder.LayoutOrder;
-                Parent = TabboxButtons;
-            });
-
-            function Tabbox:AddTab(Name)
-                local Tab = {};
-
-                local Button = Library:Create('Frame', {
-                    BackgroundColor3 = Library.MainColor;
-                    BorderColor3 = Color3.new(0, 0, 0);
-                    Size = UDim2.new(0.5, 0, 1, 0);
-                    ZIndex = 6;
-                    Parent = TabboxButtons;
-                });
-
-                Library:AddToRegistry(Button, {
-                    BackgroundColor3 = 'MainColor';
-                });
-                local ButtonLabel = Library:CreateLabel({
-                    Size = UDim2.new(1, 0, 1, 0);
-                    TextSize = 14;
-                    Text = Name;
-                    TextXAlignment = Enum.TextXAlignment.Center;
-                    ZIndex = 7;
-                    Parent = Button;
-                });
-
-                local Block = Library:Create('Frame', {
-                    BackgroundColor3 = Library.BackgroundColor;
-                    BorderSizePixel = 0;
-                    Position = UDim2.new(0, 0, 1, 0);
-                    Size = UDim2.new(1, 0, 0, 1);
-                    Visible = false;
-                    ZIndex = 9;
-                    Parent = Button;
-                });
-
-                Library:AddToRegistry(Block, {
-                    BackgroundColor3 = 'BackgroundColor';
-                });
-
-                local Container = Library:Create('Frame', {
-                    BackgroundTransparency = 1;
-                    Position = UDim2.new(0, 4, 0, 20);
-                    Size = UDim2.new(1, -4, 1, -20);
-                    ZIndex = 1;
-                    Visible = false;
-                    Parent = BoxInner;
-                });
-
-                Library:Create('UIListLayout', {
-                    FillDirection = Enum.FillDirection.Vertical;
-                    SortOrder = Enum.SortOrder.LayoutOrder;
-                    Parent = Container;
-                });
-
-                function Tab:Show()
-                    for _, Tab in next, Tabbox.Tabs do
-                        Tab:Hide();
-                    end;
-
-                    Container.Visible = true;
-                    Block.Visible = true;
-
-                    Button.BackgroundColor3 = Library.BackgroundColor;
-                    Library.RegistryMap[Button].Properties.BackgroundColor3 = 'BackgroundColor';
-
-                    Tab:Resize();
-                end;
-
-                function Tab:Hide()
-                    Container.Visible = false;
-                    Block.Visible = false;
-
-                    Button.BackgroundColor3 = Library.MainColor;
-                    Library.RegistryMap[Button].Properties.BackgroundColor3 = 'MainColor';
-                end;
-
-                function Tab:Resize()
-                    local TabCount = 0;
-
-                    for _, Tab in next, Tabbox.Tabs do
-                        TabCount = TabCount + 1;
-                    end;
-
-                    for _, Button in next, TabboxButtons:GetChildren() do
-                        if not Button:IsA('UIListLayout') then
-                            Button.Size = UDim2.new(1 / TabCount, 0, 1, 0);
-                        end;
-                    end;
-
-                    if (not Container.Visible) then
-                        return;
-                    end;
-
-                    local Size = 0;
-
-                    for _, Element in next, Tab.Container:GetChildren() do
-                        if (not Element:IsA('UIListLayout')) and Element.Visible then
-                            Size = Size + Element.Size.Y.Offset;
-                        end;
-                    end;
-
-                    BoxOuter.Size = UDim2.new(1, 0, 0, 20 + Size + 2 + 2);
-                end;
-
-                Button.InputBegan:Connect(function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
-                        Tab:Show();
-                    end;
-                end);
-
-                Tab.Container = Container;
-                Tabbox.Tabs[Name] = Tab;
-
-                setmetatable(Tab, BaseGroupbox);
-
-                Tab:AddBlank(3);
-                Tab:Resize();
-
-                -- Show first tab (number is 2 cus of the UIListLayout that also sits in that instance)
-                if #TabboxButtons:GetChildren() == 2 then
-                    Tab:Show();
-                end;
-
-                return Tab;
-            end;
-
-            Tab.Tabboxes[Info.Name or ''] = Tabbox;
-
-            return Tabbox;
-        end;
-
-        function Tab:AddLeftTabbox(Name)
-            return Tab:AddTabbox({ Name = Name, Side = 1; });
-        end;
-
-        function Tab:AddRightTabbox(Name)
-            return Tab:AddTabbox({ Name = Name, Side = 2; });
-        end;
-
-        TabButton.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                Tab:ShowTab();
-            end;
-        end);
-
-        -- This was the first tab added, so we show it by default.
-        if #TabContainer:GetChildren() == 1 then
-            Tab:ShowTab();
-        end;
-
-        Window.Tabs[Name] = Tab;
-        return Tab;
-    end;
-
-    local ModalElement = Library:Create('TextButton', {
-        BackgroundTransparency = 1;
-        Size = UDim2.new(0, 0, 0, 0);
-        Visible = true;
-        Text = '';
-        Modal = false;
-        Parent = ScreenGui;
-    });
-
-    local TransparencyCache = {};
-    local Toggled = false;
-    local Fading = false;
-
-    function Library:Toggle()
-            if Fading then
-                return
-            end
-
-            Fading = true
-            Toggled = not Toggled
-            ModalElement.Modal = Toggled
-
-            if Toggled then
-                Outer.Visible = true
-
-                task.spawn(function()
-                    local State = InputService.MouseIconEnabled
-
-                    local Cursor = Drawing.new('Triangle')
-                    Cursor.Thickness = 1
-                    Cursor.Filled = true
-                    Cursor.Visible = true
-
-                    local CursorOutline = Drawing.new('Triangle')
-                    CursorOutline.Thickness = 1
-                    CursorOutline.Filled = false
-                    CursorOutline.Color = Color3.new(0, 0, 0)
-                    CursorOutline.Visible = true
-
-                    while Toggled and ScreenGui.Parent do
-                        InputService.MouseIconEnabled = false
-
-                        local mPos = InputService:GetMouseLocation()
-
-                        Cursor.Color = Library.AccentColor
-                        Cursor.PointA = Vector2.new(mPos.X, mPos.Y)
-                        Cursor.PointB = Vector2.new(mPos.X + 16, mPos.Y + 6)
-                        Cursor.PointC = Vector2.new(mPos.X + 6, mPos.Y + 16)
-
-                        CursorOutline.PointA = Cursor.PointA
-                        CursorOutline.PointB = Cursor.PointB
-                        CursorOutline.PointC = Cursor.PointC
-
-                        RenderStepped:Wait()
-                    end
-
-                    InputService.MouseIconEnabled = State
-                    Cursor:Remove()
-                    CursorOutline:Remove()
-                end)
-            end
-
-            Outer.Visible = Toggled
-            Fading = false
-        end
-
-        Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
-            if type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
-                if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Library.ToggleKeybind.Value then
-                    task.spawn(Library.Toggle)
-                end
-            elseif Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
-                task.spawn(Library.Toggle)
-            end
-        end))
-
-        if Config.AutoShow then task.spawn(Library.Toggle) end
-
-        Window.Holder = Outer
-
-        return Window
-    end
-
-local function OnPlayerChange()
-    local PlayerList = GetPlayersString();
-
-    for _, Value in next, Options do
-        if Value.Type == 'Dropdown' and Value.SpecialType == 'Player' then
-            Value:SetValues(PlayerList);
-        end;
-    end;
-end;
-
-Players.PlayerAdded:Connect(OnPlayerChange);
-Players.PlayerRemoving:Connect(OnPlayerChange);
+local eliteSrc = game:HttpGet('https://raw.githubusercontent.com/scripter-sm/EliteZone/refs/heads/main/Dependencies/Library.lua')
+eliteSrc = eliteSrc:gsub('https://raw.githubusercontent.com/visnoukkk/Onyx/main/uilogo.png', 'rbxassetid://110265513619691')
+eliteSrc = eliteSrc:gsub('Elite Zone', 'Onyx')
+loadstring(eliteSrc)()
+local libResult = getgenv().Library
+local Library = libResult.Library
+local ThemeManager = libResult.ThemeManager
+local SaveManager = libResult.SaveManager
 
 getgenv().Library = Library
-return Library]==]
+getgenv().Toggles = Library.Toggles
+getgenv().Options = Library.Options
+local Toggles = Library.Toggles
+local Options = Library.Options
+
+do
+    local fontNames = {}
+    local builtinMap = {}
+    for _, enum in ipairs(Enum.Font:GetEnumItems()) do
+        local lower = enum.Name:lower()
+        table.insert(fontNames, lower)
+        builtinMap[lower] = enum
     end
-    local patchedSrc = rawSrc
-    local replaces = {
-        ["Fill.Size = UDim2.new(0, X, 1, 0);"] = "getgenv().InstanceSetSliderFill(Fill, X, HideBorderRight, Slider);",
-        ["Fill.Size = UDim2.new(0, nX, 1, 0);"] = "getgenv().InstanceSetSliderFill(Fill, nX, HideBorderRight, Slider);",
-        ["MinSlider.Fill.Size = UDim2.new(0, MinX, 1, 0);"] = "getgenv().InstanceSetSliderFill(MinSlider.Fill, MinX);",
-        ["MaxSlider.Fill.Size = UDim2.new(0, MaxX, 1, 0);"] = "getgenv().InstanceSetSliderFill(MaxSlider.Fill, MaxX);",
-        ["MinSlider.Fill.Size = UDim2.new(0, nX, 1, 0);"] = "getgenv().InstanceSetSliderFill(MinSlider.Fill, nX);",
-        ["MaxSlider.Fill.Size = UDim2.new(0, nX, 1, 0);"] = "getgenv().InstanceSetSliderFill(MaxSlider.Fill, nX);",
-        ["ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;"] = "ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;\nScreenGui.DisplayOrder = 2147483646;\nScreenGui.IgnoreGuiInset = true;",
-        ["AccentColor = Color3.fromRGB(200, 149, 108)"] = "AccentColor = Color3.fromRGB(0, 200, 255)",
-        ["AccentColor = Color3.fromRGB(200, 149, 106)"] = "AccentColor = Color3.fromRGB(0, 200, 255)",
-        ["AccentColor = Color3.fromRGB(200, 149, 107)"] = "AccentColor = Color3.fromRGB(0, 200, 255)",
-        ["AccentColor = Color3.fromRGB(0, 110, 55)"] = "AccentColor = Color3.fromRGB(0, 200, 255)",
+    Library.FontSystem = {
+        AllNames = function() return fontNames end,
+        Aliases = {},
+        Builtin = builtinMap,
+        Resolve = function() return nil end
     }
-    for old, new in pairs(replaces) do
-        patchedSrc = patchedSrc:gsub(old:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"), new)
-    end
-    if writefile then pcall(writefile, "InstanceLibrary_Patched.lua", patchedSrc) end
-    local loader = loadstring or load
-    local fn, err = loader(patchedSrc)
-    if not fn then
-        fn = loader(rawSrc)
-    end
-    if fn then
-        local lib = fn()
-        getgenv()[cacheKey] = fn
-        return lib
-    end
-    error("[instance] library failed to load")
 end
 
-local Library = loadInstanceLibrary()
-
-local INSTANCE_ACCENT = Color3.fromRGB(0, 200, 255)
-local INSTANCE_BROWN_ACCENTS = {
-    Color3.fromRGB(200, 149, 108),
-    Color3.fromRGB(200, 149, 106),
-    Color3.fromRGB(200, 149, 107),
-    Color3.fromRGB(0, 110, 55),
-}
-
-local function colorNearAccent(a, b)
-    return math.abs(a.R - b.R) + math.abs(a.G - b.G) + math.abs(a.B - b.B) < 0.04
-end
-
-local function isLegacyBrownAccent(c)
-    for _, legacy in ipairs(INSTANCE_BROWN_ACCENTS) do
-        if colorNearAccent(c, legacy) then
-            return true
-        end
-    end
-    return false
-end
+local INSTANCE_ACCENT = Color3.fromRGB(71, 119, 182)
 
 local function applyInstanceAccentTheme()
     if not Library then return end
+    Library.FontColor = Color3.fromRGB(255, 255, 255)
+    Library.MainColor = Color3.fromRGB(24, 24, 24)
+    Library.BackgroundColor = Color3.fromRGB(20, 20, 20)
     Library.AccentColor = INSTANCE_ACCENT
-    if Library.GetDarkerColor then
-        Library.AccentColorDark = Library:GetDarkerColor(INSTANCE_ACCENT)
-    else
+    Library.OutlineColor = Color3.fromRGB(31, 31, 31)
+    if Library.AccentColorDark == nil then
         local h, s, v = Color3.toHSV(INSTANCE_ACCENT)
         Library.AccentColorDark = Color3.fromHSV(h, s, v / 1.5)
     end
     if Library.UpdateColorsUsingRegistry then
         pcall(function() Library:UpdateColorsUsingRegistry() end)
     end
-    pcall(function()
-        if Library.ScreenGui then
-            for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-                if obj:IsA("GuiObject") and isLegacyBrownAccent(obj.BackgroundColor3) then
-                    obj.BackgroundColor3 = INSTANCE_ACCENT
-                end
-                if obj:IsA("TextLabel") and isLegacyBrownAccent(obj.TextColor3) then
-                    obj.TextColor3 = INSTANCE_ACCENT
-                end
-            end
-        end
-    end)
 end
 applyInstanceAccentTheme()
 getgenv().InstanceApplyAccentTheme = applyInstanceAccentTheme
 
-local SaveManager = loadstring([==[local httpService = game:GetService('HttpService')
-local SaveManager = {} do
-	SaveManager.Folder = 'LinoriaLibSettings'
-	SaveManager.Ignore = {}
-	SaveManager.Parser = {
-		Toggle = {
-			Save = function(idx, object) 
-				return { type = 'Toggle', idx = idx, value = object.Value } 
-			end,
-			Load = function(idx, data)
-				if Toggles[idx] then 
-					Toggles[idx]:SetValue(data.value)
-				end
-			end,
-		},
 
-		Slider = {
-			Save = function(idx, object)
-				return { type = 'Slider', idx = idx, value = object.Value }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValue(data.value)
-				end
-			end,
-		},
-
-		Dropdown = {
-			Save = function(idx, object)
-				return { type = 'Dropdown', idx = idx, value = object.Value, multi = object.Multi }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValue(data.value)
-				end
-			end,
-		},
-
-		ColorPicker = {
-			Save = function(idx, object)
-				return { 
-					type = 'ColorPicker', 
-					idx = idx, 
-					value = object.Value:ToHex(), 
-					transparency = object.Transparency 
-				}
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValueRGB(Color3.fromHex(data.value or "FFFFFF"), data.transparency or 0)
-				end
-			end,
-		},
-
-		KeyPicker = {
-			Save = function(idx, object) 
-				return { 
-					type = 'KeyPicker', 
-					idx = idx, 
-					key = object.Value or "None",
-					mode = object.Mode or "Toggle",
-					toggled = object.Toggled or false,
-					syncToggleState = object.SyncToggleState or false
-				} 
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					if Options[idx].SetValue then
-						if type(Options[idx].SetValue) == "function" then
-							Options[idx]:SetValue({ data.key, data.mode })
-						else
-							Options[idx].Value = data.key
-							Options[idx].Mode = data.mode
-						end
-					end
-					if data.toggled ~= nil and Options[idx].Toggled ~= nil then
-						Options[idx].Toggled = data.toggled
-					end
-					if Options[idx].Update then
-						Options[idx]:Update()
-					end
-					if Options[idx].Display then
-						Options[idx]:Display()
-					end
-				end
-			end,
-		},
-
-		Keybind = {
-			Save = function(idx, object)
-				return { 
-					type = 'Keybind', 
-					idx = idx, 
-					key = object.Value or "None",
-					mode = object.Mode or "Toggle",
-					toggled = object.Toggled or false,
-					syncToggleState = object.SyncToggleState or false
-				} 
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					if Options[idx].SetValue then
-						if type(Options[idx].SetValue) == "function" then
-							Options[idx]:SetValue({ data.key, data.mode })
-						else
-							Options[idx].Value = data.key
-							Options[idx].Mode = data.mode
-						end
-					end
-					if data.toggled ~= nil and Options[idx].Toggled ~= nil then
-						Options[idx].Toggled = data.toggled
-					end
-					if Options[idx].Update then
-						Options[idx]:Update()
-					end
-					if Options[idx].Display then
-						Options[idx]:Display()
-					end
-				end
-			end,
-		},
-
-		Input = {
-			Save = function(idx, object)
-				return { type = 'Input', idx = idx, text = object.Value }
-			end,
-			Load = function(idx, data)
-				if Options[idx] and type(data.text) == 'string' then
-					Options[idx]:SetValue(data.text)
-				end
-			end,
-		},
-
-		Theme = {
-			Save = function()
-				local colors = {}
-				for _, name in ipairs({"FontColor", "MainColor", "BackgroundColor", "AccentColor", "OutlineColor", "RiskColor"}) do
-					if Library[name] then
-						colors[name] = Library[name]:ToHex()
-					end
-				end
-				return { type = 'Theme', colors = colors }
-			end,
-			Load = function(data)
-				if not data.colors then return end
-				for name, hex in pairs(data.colors) do
-					if Library[name] then
-						Library[name] = Color3.fromHex(hex)
-					end
-				end
-				Library:UpdateColorsUsingRegistry()
-			end,
-		}
-	}
-
-	function SaveManager:SetIgnoreIndexes(list)
-		for _, key in next, list do
-			self.Ignore[key] = true
-		end
-	end
-
-	function SaveManager:SetFolder(folder)
-		self.Folder = folder
-		self:BuildFolderTree()
-	end
-
-	function SaveManager:Save(name)
-		if not name or name:gsub("%s+", "") == "" then
-			return false, "no config name"
-		end
-
-		local fullPath = self.Folder .. '/settings/' .. name .. '.json'
-
-		local data = { objects = {}, theme = nil }
-
-		for idx, toggle in next, Toggles do
-			if self.Ignore[idx] then continue end
-			table.insert(data.objects, self.Parser.Toggle.Save(idx, toggle))
-		end
-
-		for idx, option in next, Options do
-			if self.Ignore[idx] then continue end
-			
-			local parser = nil
-			
-			if option.Type == 'KeyPicker' then
-				parser = self.Parser.KeyPicker
-			elseif option.Type == 'Keybind' then
-				parser = self.Parser.Keybind
-			else
-				parser = self.Parser[option.Type]
-			end
-			
-			if parser and parser.Save then
-				table.insert(data.objects, parser.Save(idx, option))
-			end
-		end
-
-		data.theme = self.Parser.Theme.Save()
-
-		local success, encoded = pcall(httpService.JSONEncode, httpService, data)
-		if not success then return false, 'encode failed' end
-
-		writefile(fullPath, encoded)
-		return true
-	end
-
-	function SaveManager:Load(name)
-		if not name then return false, 'no config selected' end
-
-		local file = self.Folder .. '/settings/' .. name .. '.json'
-		if not isfile(file) then return false, 'file not found' end
-
-		local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(file))
-		if not success then return false, 'decode failed' end
-
-		for _, obj in next, decoded.objects or {} do
-			local parser = nil
-			
-			if obj.type == 'KeyPicker' then
-				parser = self.Parser.KeyPicker
-			elseif obj.type == 'Keybind' then
-				parser = self.Parser.Keybind
-			else
-				parser = self.Parser[obj.type]
-			end
-			
-			if parser and parser.Load then
-				task.spawn(parser.Load, obj.idx, obj)
-			end
-		end
-
-		if decoded.theme then
-			self.Parser.Theme.Load(decoded.theme)
-		end
-
-		return true
-	end
-
-	function SaveManager:IgnoreThemeSettings()
-		self:SetIgnoreIndexes({ 
-			"BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "RiskColor",
-			"ThemeManager_ThemeList", "ThemeManager_CustomThemeList", "ThemeManager_CustomThemeName"
-		})
-	end
-
-	function SaveManager:BuildFolderTree()
-		local paths = { self.Folder, self.Folder .. '/themes', self.Folder .. '/settings' }
-		for _, path in ipairs(paths) do
-			if not isfolder(path) then makefolder(path) end
-		end
-	end
-
-	function SaveManager:RefreshConfigList()
-		local list = listfiles(self.Folder .. '/settings')
-		local out = {}
-		for _, file in ipairs(list) do
-			if file:sub(-5) == '.json' then
-				local name = file:match("([^/\\]+)%.json$")
-				if name then table.insert(out, name) end
-			end
-		end
-		return out
-	end
-
-	function SaveManager:SetLibrary(library)
-		self.Library = library
-		library.SaveManager = self
-	end
-
-	function SaveManager:LoadAutoloadConfig()
-		local path = self.Folder .. '/settings/autoload.txt'
-		if isfile(path) then
-			local name = readfile(path):gsub("%s+", "")
-			if name ~= "" then
-				local success, err = self:Load(name)
-				if success then
-					self.Library:Notify('Auto-loaded config: ' .. name, 4)
-				else
-					self.Library:Notify('Failed to auto-load: ' .. err, 4)
-				end
-			end
-		end
-	end
-
-	function SaveManager:BuildConfigSection(tab)
-		assert(self.Library, 'Library not set')
-
-		local section = tab:AddRightGroupbox('Configs')
-
-		section:AddInput('SaveManager_ConfigName', { Text = 'Config Name' })
-		section:AddDropdown('SaveManager_ConfigList', { 
-			Text = 'Config List', 
-			Values = self:RefreshConfigList(), 
-			AllowNull = true 
-		})
-
-		section:AddDivider()
-
-		section:AddButton('Create Config', function()
-			local name = Options.SaveManager_ConfigName.Value
-			if name:gsub("%s+", "") == "" then
-				return self.Library:Notify('Config name cannot be empty', 2)
-			end
-
-			local success, err = self:Save(name)
-			if success then
-				self.Library:Notify('Created config: ' .. name, 3)
-				Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-			else
-				self.Library:Notify('Failed to save: ' .. err, 3)
-			end
-		end):AddButton('Load Config', function()
-			local name = Options.SaveManager_ConfigList.Value
-			if not name then return end
-
-			local success, err = self:Load(name)
-			if success then
-				self.Library:Notify('Loaded: ' .. name, 3)
-			else
-				self.Library:Notify('Load failed: ' .. err, 3)
-			end
-		end)
-
-		section:AddButton('Overwrite Config', function()
-			local name = Options.SaveManager_ConfigList.Value
-			if not name then return end
-			local success, err = self:Save(name)
-			if success then
-				self.Library:Notify('Overwrote: ' .. name, 3)
-			else
-				self.Library:Notify('Overwrite failed: ' .. err, 3)
-			end
-		end)
-
-		section:AddButton('Refresh List', function()
-			Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-		end)
-
-		section:AddButton('Set as Autoload', function()
-			local name = Options.SaveManager_ConfigList.Value
-			if not name then return end
-			writefile(self.Folder .. '/settings/autoload.txt', name)
-			self.Library:Notify('Set ' .. name .. ' as autoload', 3)
-		end)
-
-		SaveManager.AutoloadLabel = section:AddLabel('Autoload: none', true)
-
-		if isfile(self.Folder .. '/settings/autoload.txt') then
-			local name = readfile(self.Folder .. '/settings/autoload.txt')
-			SaveManager.AutoloadLabel:SetText('Autoload: ' .. name)
-		end
-
-		SaveManager:SetIgnoreIndexes({ 'SaveManager_ConfigList', 'SaveManager_ConfigName' })
-	end
-
-	SaveManager:BuildFolderTree()
-end
-
-return SaveManager]==])()
-local ThemeManager = loadstring([==[local httpService = game:GetService('HttpService')
-local ThemeManager = {} do
-	ThemeManager.Folder = 'LinoriaLibSettings'
-	-- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
-
-	ThemeManager.Library = nil
-	ThemeManager.BuiltInThemes = {
-    ['Default'] = { 1, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"c8956c","BackgroundColor":"141414","OutlineColor":"323232"}') },
-    ['Purple'] = { 2, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"4400ff","BackgroundColor":"141414","OutlineColor":"323232"}') },
-    ['Fatality'] = { 3, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1e1842","AccentColor":"c50754","BackgroundColor":"191335","OutlineColor":"3c355d"}') },
-    ['Mint'] = { 4, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"242424","AccentColor":"3db488","BackgroundColor":"1c1c1c","OutlineColor":"373737"}') },
-    ['Tokyo Night'] = { 5, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"191925","AccentColor":"6759b3","BackgroundColor":"16161f","OutlineColor":"323232"}') },
-    ['Quartz'] = { 6, httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"232330","AccentColor":"426e87","BackgroundColor":"1d1b26","OutlineColor":"27232f"}') },
-    ['Silver Lake'] = { 7, httpService:JSONDecode('{"FontColor":"c7c7c8","MainColor":"1b1e24","AccentColor":"5471bc","BackgroundColor":"121317","OutlineColor":"312e2e"}') },
-}
-
-	function ThemeManager:ApplyTheme(theme)
-		local customThemeData = self:GetCustomTheme(theme)
-		local data = customThemeData or self.BuiltInThemes[theme]
-
-		if not data then return end
-
-		-- custom themes are just regular dictionaries instead of an array with { index, dictionary }
-
-		local scheme = data[2]
-		for idx, col in next, customThemeData or scheme do
-			self.Library[idx] = Color3.fromHex(col)
-			
-			if Options[idx] then
-				Options[idx]:SetValueRGB(Color3.fromHex(col))
-			end
-		end
-
-		self:ThemeUpdate()
-	end
-
-	function ThemeManager:ThemeUpdate()
-    local options = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
-    for i, field in next, options do
-        if Options and Options[field] then
-            self.Library[field] = Options[field].Value
-        end
-    end
-
-    self.Library.AccentColorDark = self.Library:GetDarkerColor(self.Library.AccentColor)
-    self.Library:UpdateColorsUsingRegistry()
-
-    if self.Library.ScreenGui then
-        for _, v in ipairs(self.Library.ScreenGui:GetDescendants()) do
-            if v:IsA("TextLabel") and v.BackgroundTransparency < 1 and v.Size.Y.Offset <= 18 then
-                v.BackgroundTransparency = 1
-            end
-        end
-    end
-end
-
-	function ThemeManager:LoadDefault()		
-		local theme = 'Default'
-		local content = isfile(self.Folder .. '/themes/default.txt') and readfile(self.Folder .. '/themes/default.txt')
-
-		local isDefault = true
-		if content then
-			if self.BuiltInThemes[content] then
-				theme = content
-			elseif self:GetCustomTheme(content) then
-				theme = content
-				isDefault = false;
-			end
-		elseif self.BuiltInThemes[self.DefaultTheme] then
-		 	theme = self.DefaultTheme
-		end
-
-		if isDefault then
-			Options.ThemeManager_ThemeList:SetValue(theme)
-		else
-			self:ApplyTheme(theme)
-		end
-	end
-
-	function ThemeManager:SaveDefault(theme)
-		writefile(self.Folder .. '/themes/default.txt', theme)
-	end
-
-	function ThemeManager:CreateThemeManager(groupbox)
-		groupbox:AddLabel('Background color'):AddColorPicker('BackgroundColor', { Default = self.Library.BackgroundColor });
-		groupbox:AddLabel('Main color')	:AddColorPicker('MainColor', { Default = self.Library.MainColor });
-		groupbox:AddLabel('Accent color'):AddColorPicker('AccentColor', { Default = self.Library.AccentColor });
-		groupbox:AddLabel('Outline color'):AddColorPicker('OutlineColor', { Default = self.Library.OutlineColor });
-		groupbox:AddLabel('Font color')	:AddColorPicker('FontColor', { Default = self.Library.FontColor });
-
-		local ThemesArray = {}
-		for Name, Theme in next, self.BuiltInThemes do
-			table.insert(ThemesArray, Name)
-		end
-
-		table.sort(ThemesArray, function(a, b) return self.BuiltInThemes[a][1] < self.BuiltInThemes[b][1] end)
-
-		groupbox:AddDivider()
-		groupbox:AddDropdown('ThemeManager_ThemeList', { Text = 'Theme list', Values = ThemesArray, Default = 1 })
-
-		groupbox:AddButton('Set as default', function()
-			self:SaveDefault(Options.ThemeManager_ThemeList.Value)
-			self.Library:Notify(string.format('Set default theme to %q', Options.ThemeManager_ThemeList.Value))
-		end)
-
-		Options.ThemeManager_ThemeList:OnChanged(function()
-			self:ApplyTheme(Options.ThemeManager_ThemeList.Value)
-		end)
-
-		groupbox:AddDivider()
-		groupbox:AddInput('ThemeManager_CustomThemeName', { Text = 'Custom theme name' })
-		groupbox:AddDropdown('ThemeManager_CustomThemeList', { Text = 'Custom themes', Values = self:ReloadCustomThemes(), AllowNull = true, Default = 1 })
-		groupbox:AddDivider()
-		
-		groupbox:AddButton('Save theme', function() 
-			self:SaveCustomTheme(Options.ThemeManager_CustomThemeName.Value)
-
-			Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
-			Options.ThemeManager_CustomThemeList:SetValue(nil)
-		end):AddButton('Load theme', function() 
-			self:ApplyTheme(Options.ThemeManager_CustomThemeList.Value) 
-		end)
-
-		groupbox:AddButton('Refresh list', function()
-			Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
-			Options.ThemeManager_CustomThemeList:SetValue(nil)
-		end)
-
-		groupbox:AddButton('Set as default', function()
-			if Options.ThemeManager_CustomThemeList.Value ~= nil and Options.ThemeManager_CustomThemeList.Value ~= '' then
-				self:SaveDefault(Options.ThemeManager_CustomThemeList.Value)
-				self.Library:Notify(string.format('Set default theme to %q', Options.ThemeManager_CustomThemeList.Value))
-			end
-		end)
-
-		ThemeManager:LoadDefault()
-
-		local function UpdateTheme()
-			self:ThemeUpdate()
-		end
-
-		Options.BackgroundColor:OnChanged(UpdateTheme)
-		Options.MainColor:OnChanged(UpdateTheme)
-		Options.AccentColor:OnChanged(UpdateTheme)
-		Options.OutlineColor:OnChanged(UpdateTheme)
-		Options.FontColor:OnChanged(UpdateTheme)
-	end
-
-	function ThemeManager:GetCustomTheme(file)
-		local path = self.Folder .. '/themes/' .. file
-		if not isfile(path) then
-			return nil
-		end
-
-		local data = readfile(path)
-		local success, decoded = pcall(httpService.JSONDecode, httpService, data)
-		
-		if not success then
-			return nil
-		end
-
-		return decoded
-	end
-
-	function ThemeManager:SaveCustomTheme(file)
-		if file:gsub(' ', '') == '' then
-			return self.Library:Notify('Invalid file name for theme (empty)', 3)
-		end
-
-		local theme = {}
-		local fields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
-
-		for _, field in next, fields do
-			theme[field] = Options[field].Value:ToHex()
-		end
-
-		writefile(self.Folder .. '/themes/' .. file .. '.json', httpService:JSONEncode(theme))
-	end
-
-	function ThemeManager:ReloadCustomThemes()
-		local list = listfiles(self.Folder .. '/themes')
-
-		local out = {}
-		for i = 1, #list do
-			local file = list[i]
-			if file:sub(-5) == '.json' then
-				-- i hate this but it has to be done ...
-
-				local pos = file:find('.json', 1, true)
-				local char = file:sub(pos, pos)
-
-				while char ~= '/' and char ~= '\\' and char ~= '' do
-					pos = pos - 1
-					char = file:sub(pos, pos)
-				end
-
-				if char == '/' or char == '\\' then
-					table.insert(out, file:sub(pos + 1))
-				end
-			end
-		end
-
-		return out
-	end
-
-	function ThemeManager:SetLibrary(lib)
-		self.Library = lib
-		lib.ThemeManager = self
-	end
-
-	function ThemeManager:BuildFolderTree()
-		local paths = {}
-
-		-- build the entire tree if a path is like some-hub/phantom-forces
-		-- makefolder builds the entire tree on Synapse X but not other exploits
-
-		local parts = self.Folder:split('/')
-		for idx = 1, #parts do
-			paths[#paths + 1] = table.concat(parts, '/', 1, idx)
-		end
-
-		table.insert(paths, self.Folder .. '/themes')
-		table.insert(paths, self.Folder .. '/settings')
-
-		for i = 1, #paths do
-			local str = paths[i]
-			if not isfolder(str) then
-				makefolder(str)
-			end
-		end
-	end
-
-	function ThemeManager:SetFolder(folder)
-		self.Folder = folder
-		self:BuildFolderTree()
-	end
-
-	function ThemeManager:CreateGroupBox(tab)
-		assert(self.Library, 'Must set ThemeManager.Library first!')
-		return tab:AddLeftGroupbox('Themes')
-	end
-
-	function ThemeManager:ApplyToTab(tab)
-		assert(self.Library, 'Must set ThemeManager.Library first!')
-		local groupbox = self:CreateGroupBox(tab)
-		self:CreateThemeManager(groupbox)
-	end
-
-	function ThemeManager:ApplyToGroupbox(groupbox)
-		assert(self.Library, 'Must set ThemeManager.Library first!')
-		self:CreateThemeManager(groupbox)
-	end
-
-	ThemeManager:BuildFolderTree()
-end
-
-return ThemeManager]==])()
 
 local INSTANCE_MENU_DISPLAY_ORDER = 2147483646
 local INSTANCE_COSMETIC_DISPLAY_ORDER = 2147483647
@@ -5387,15 +677,35 @@ local function applyInstanceUiLayering()
 end
 getgenv().InstanceApplyUiLayering = applyInstanceUiLayering
 
-local Window = Library:CreateWindow({
-    Title = 'instance',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 6,
-    MenuFadeTime = 0,
-    RedRightText = ' Rivals',
-    Size = Vector2.new(700, 600),
-})
+local vpSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+local isSmallRes = vpSize.X < 1280 or vpSize.Y < 720
+
+local _silentLoadFlag = false
+pcall(function()
+    if isfile("onyx/silentload.txt") and readfile("onyx/silentload.txt") == "true" then
+        _silentLoadFlag = true
+    end
+end)
+
+local windowCfg = {
+    Title = 'ONYX',
+    Center = not isSmallRes,
+    AutoShow = not _silentLoadFlag,
+    TabPadding = 8,
+    MenuFadeTime = 0.2,
+}
+
+if isSmallRes then
+    local margin = 20
+    windowCfg.Size = UDim2.fromOffset(
+        math.min(750, vpSize.X - margin * 2),
+        math.min(600, vpSize.Y - margin * 2)
+    )
+    windowCfg.Position = UDim2.fromOffset(margin, margin)
+end
+
+Library.EzLogoOn = false
+local Window = Library:CreateWindow(windowCfg)
 
 applyInstanceUiLayering()
 
@@ -5569,7 +879,7 @@ getgenv().InstanceGetUiFont = function()
     if Library and Library.Font then
         return Library.Font
     end
-    return getgenv().InstanceUIFont or Enum.Font.Roboto
+    return getgenv().InstanceUIFont or Font.fromEnum(Enum.Font.Roboto)
 end
 
 getgenv().InstanceL = function(key, ...)
@@ -5737,6 +1047,8 @@ local Tabs = {
     Visuals = Window:AddTab("visuals"),
     World = Window:AddTab("world"),
     Misc = Window:AddTab("misc"),
+    Skins = Window:AddTab("skins"),
+    Lua = Window:AddTab("lua"),
     ['UI Settings'] = Window:AddTab('settings'),
 }
 
@@ -5889,17 +1201,17 @@ local getDamageBillboardInfo
 local startProjectileBypass
 local stopProjectileBypass
 
+local hitEffectsBox = Tabs.World:AddRightGroupbox('hit effects')
+local hitSoundsBox = Tabs.World:AddRightGroupbox('hit sounds')
+local hitNotifBox = Tabs.World:AddRightGroupbox('hit notifications')
+
 do
 
 
-local RightGroup = Tabs.Combat:AddLeftTabbox()
-
-local silenttab           = RightGroup:AddTab('silent')
-local silentcustomization = RightGroup:AddTab('customization')
-
-local AimbotGroup     = Tabs.Combat:AddRightTabbox()
-local aimbotTab       = AimbotGroup:AddTab('aimbot')
-local aimbotCustomTab = AimbotGroup:AddTab('customization')
+local silentAimBox      = Tabs.Combat:AddLeftGroupbox('silent aim')
+local silentCustBox     = Tabs.Combat:AddLeftGroupbox('silent customization')
+local aimbotBox         = Tabs.Combat:AddRightGroupbox('aimbot')
+local aimbotCustBox     = Tabs.Combat:AddRightGroupbox('aimbot customization')
 
 local textureAssets, soundsassets, HPlist, restricteditems
 
@@ -6042,20 +1354,31 @@ local function weaponstricted(weaponName)
     return false
 end
 
+local cachedWeapon = nil
 local function curweap2()
+    if cachedWeapon then return cachedWeapon end
     local vm = Workspace:FindFirstChild("ViewModels")
     if not vm then return nil end
     local fp = vm:FindFirstChild("FirstPerson")
     if not fp then return nil end
     for _, child in ipairs(fp:GetChildren()) do
-        local parts = {}
-        for p in child.Name:gmatch("[^-]+") do
-            table.insert(parts, p:match("^%s*(.-)%s*$"))
+        local name = child.Name
+        local dash = name:find("-")
+        if dash then
+            cachedWeapon = name:sub(dash + 1):match("^%s*(.-)%s*$")
+            return cachedWeapon
         end
-        if #parts >= 2 then return parts[2] end
     end
     return nil
 end
+local function resetWeaponCache() cachedWeapon = nil end
+task.spawn(function()
+    local vm = Workspace:FindFirstChild("ViewModels")
+    if vm then
+        vm.DescendantAdded:Connect(resetWeaponCache)
+        vm.DescendantRemoving:Connect(resetWeaponCache)
+    end
+end)
 
 
 local fovScreenGui = Instance.new("ScreenGui")
@@ -6064,7 +1387,7 @@ fovScreenGui.DisplayOrder    = INSTANCE_GAMEPLAY_OVERLAY_ORDER
 fovScreenGui.ResetOnSpawn    = false
 fovScreenGui.IgnoreGuiInset  = true
 fovScreenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
-fovScreenGui.Parent          = game.CoreGui
+pcall(function() fovScreenGui.Parent = game:GetService("CoreGui") end)
 
 
 local function buildfov(name, cfg)
@@ -6211,21 +1534,26 @@ end
 local bulletTracer = { enabled=false, color=Color3.fromRGB(255,255,255), style="Line", glow=0, size=1, duration=3, fadeTime=0.5 }
 
 local DISABLE_TRACERS = false
+getgenv().DISABLE_TRACERS = DISABLE_TRACERS
 local hitSound     = { enabled=false, style="Rust HS", volume=0.5, pitch=1.0 }
 local localHitTargets = setmetatable({}, { __mode = "k" })
-local silentAim    = { enabled=false, hitPart="Head", fovRadius=100, autoShoot=false, followMuzzle=false, hitChance=100 }
+getgenv().localHitTargets = localHitTargets
+local silentAim    = { enabled=false, hitPart="Head", fovRadius=100, autoShoot=false, followMuzzle=false, followTarget=false, followTargetSmoothness=0, hitChance=100 }
 local aimbot       = {
     enabled = false,
     masterEnabled = false,
-    keyMode = "toggle",
+    keyMode = "always",
     showFov = false,
     targetPart = "Head",
     fovRadius = 500,
     smoothness = 2,
     aimCurve = "Linear",
     followMuzzle = false,
+    followTarget = false,
+    followTargetSmoothness = 5,
     lockedTarget = nil,
     smoothCF = nil,
+    wallCheck = false,
 }
 local backshoot    = { enabled=false, connection=nil, target=nil, origCFrame=nil }
 
@@ -6275,7 +1603,65 @@ local function screenpos2(worldPos)
     return Vector2.new(sp.X, sp.Y)
 end
 
+local function getRagebotTarget()
+    return getgenv().InstanceRagebotTarget
+end
+
+local function targetScreenPos(target)
+    if not target then return nil end
+    local hrp = target:IsA("Player") and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        or target:FindFirstChild("HumanoidRootPart")
+        or target:IsA("BasePart") and target
+    if not hrp then return nil end
+    return screenpos2(hrp.Position)
+end
+
+getgenv().getBestTargetScreenPos = function()
+    local s
+    if type(aimbot) == "table" and aimbot.lockedTarget then
+        s = targetScreenPos(aimbot.lockedTarget)
+        if s then return s end
+    end
+    local rageTarget = getRagebotTarget()
+    if rageTarget then
+        s = targetScreenPos(rageTarget)
+        if s then return s end
+    end
+    if curtarget then
+        s = targetScreenPos(curtarget)
+        if s then return s end
+    end
+    local cam = Camera or workspace.CurrentCamera
+    if not cam then return nil end
+    local best, bestDist = nil, math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 0 and root then
+                local pos, onScreen = worldToScreen(root.Position, cam)
+                if onScreen then
+                    local dx = pos.X - cam.ViewportSize.X * 0.5
+                    local dy = pos.Y - cam.ViewportSize.Y * 0.5
+                    local dist = dx * dx + dy * dy
+                    if dist < bestDist then
+                        bestDist = dist
+                        best = pos
+                    end
+                end
+            end
+        end
+    end
+    if best then return Vector2.new(best.X, best.Y) end
+    return nil
+end
+local getBestTargetScreenPos = getgenv().getBestTargetScreenPos
+
 local function silentfovcenter()
+    if silentAim.followTarget then
+        local s = getBestTargetScreenPos()
+        if s then return s end
+    end
     if silentAim.followMuzzle then
         local s = screenpos2(muzzlepos())
         if s then return s end
@@ -6284,6 +1670,10 @@ local function silentfovcenter()
 end
 
 local function aimbotfovcenter()
+    if aimbot.followTarget then
+        local s = getBestTargetScreenPos()
+        if s then return s end
+    end
     if aimbot.followMuzzle then
         local s = screenpos2(muzzlepos())
         if s then return s end
@@ -6459,6 +1849,7 @@ local function findShotMuzzlePosition()
     local root = myChar:FindFirstChild("HumanoidRootPart")
     return root and root.Position or Vector3.zero
 end
+getgenv().findShotMuzzlePosition = findShotMuzzlePosition
 
 local trackedAmmo = nil
 local bulletDetectConn = nil
@@ -6471,6 +1862,12 @@ _G.Features.DisableGunSounds = _G.Features.DisableGunSounds or false
 local function shootSoundsActive()
     return _G.Features.DisableGunSounds == true
 end
+
+local isRivalsGunSound
+local notifyProjectileImpact
+local getPlayerFromHitPart
+local handleLocalShot
+local registerLocalShot
 
 local function restoreGunSoundVolumes()
     local function tryRestore(root)
@@ -6501,6 +1898,7 @@ local function restoreGunSoundVolumes()
         tryRestore(char)
     end
 end
+getgenv().restoreGunSoundVolumes = restoreGunSoundVolumes
 
 local function bulletFeedbackActive()
     return bulletTracer.enabled
@@ -6615,7 +2013,7 @@ local function isLikelyLocalProjectile(inst)
     return false
 end
 
-local function isRivalsGunSound(sound)
+isRivalsGunSound = function(sound)
     if typeof(sound) ~= "Instance" or not sound:IsA("Sound") then
         return false
     end
@@ -6726,7 +2124,7 @@ end
 
 getgenv().InstanceRefreshGunSoundMute = refreshGunSoundMute
 
-local function registerLocalShot(bypassCooldown)
+registerLocalShot = function(bypassCooldown)
     local cw = curweap2()
     if not cw or weaponstricted(cw) then
         return
@@ -6740,7 +2138,7 @@ local function registerLocalShot(bypassCooldown)
     markCombatShot()
 end
 
-local function handleLocalShot(bypassCooldown)
+handleLocalShot = function(bypassCooldown)
     registerLocalShot(bypassCooldown)
 
     local muzzlePos = findShotMuzzlePosition()
@@ -6752,7 +2150,7 @@ local function handleLocalShot(bypassCooldown)
         endPos = camCFrame.Position + camCFrame.LookVector * 1000
         local params = RaycastParams.new()
         params.FilterDescendantsInstances = { LocalPlayer.Character }
-        params.FilterType = Enum.RaycastFilterType.Blacklist
+        params.FilterType = Enum.RaycastFilterType.Exclude
         local res = workspace:Raycast(muzzlePos, (endPos - muzzlePos).Unit * 1000, params)
         if res then
             endPos = res.Position
@@ -6833,7 +2231,7 @@ local function bindProjectileImpactDetection(projectile)
             return
         end
         local plr, hum = playerFromHitPartFn(hit)
-        if not plr or not hum or plr == player then
+        if not plr or not hum or plr == LocalPlayer then
             handled = true
             return
         end
@@ -7000,6 +2398,11 @@ local function checkForHit()
 end
 
 
+local silentFOVSmoothPos = Vector2.new(0, 0)
+local aimbotFOVSmoothPos = Vector2.new(0, 0)
+local silentFOVSmoothInit = false
+local aimbotFOVSmoothInit = false
+
 RunService.RenderStepped:Connect(function()
     local showSilentFOV = silentFOVContainer.Visible
     local showAimbotFOV = aimbotFOVContainer.Visible
@@ -7011,8 +2414,20 @@ RunService.RenderStepped:Connect(function()
     if showSilentFOV then
         local c = silentfovcenter()
         local r = silentAim.fovRadius
-        silentFOVContainer.Size     = UDim2.fromOffset(r*2, r*2)
-        silentFOVContainer.Position = UDim2.fromOffset(c.X-r, c.Y-r)
+        silentFOVContainer.Size = UDim2.fromOffset(r*2, r*2)
+        if silentAim.followTarget and silentAim.followTargetSmoothness > 0 then
+            local smooth = silentAim.followTargetSmoothness * 10
+            local alpha = math.clamp(1 / math.max(smooth, 1), 0, 1)
+            if not silentFOVSmoothInit then
+                silentFOVSmoothPos = c
+                silentFOVSmoothInit = true
+            end
+            silentFOVSmoothPos = silentFOVSmoothPos:Lerp(c, alpha)
+            silentFOVContainer.Position = UDim2.fromOffset(silentFOVSmoothPos.X - r, silentFOVSmoothPos.Y - r)
+        else
+            silentFOVSmoothInit = false
+            silentFOVContainer.Position = UDim2.fromOffset(c.X - r, c.Y - r)
+        end
         if silentFOVCfg.FilledAnimated then
             silentFOVFillGrad.Rotation = math.sin(tick()*silentFOVCfg.FilledSpeed)*180 + silentFOVCfg.FilledRotation
         elseif silentFOVCfg.SpinOn then
@@ -7026,8 +2441,20 @@ RunService.RenderStepped:Connect(function()
     if showAimbotFOV then
         local c = aimbotfovcenter()
         local r = aimbot.fovRadius
-        aimbotFOVContainer.Size     = UDim2.fromOffset(r*2, r*2)
-        aimbotFOVContainer.Position = UDim2.fromOffset(c.X-r, c.Y-r)
+        aimbotFOVContainer.Size = UDim2.fromOffset(r*2, r*2)
+        if aimbot.followTarget and aimbot.followTargetSmoothness > 0 then
+            local smooth = aimbot.followTargetSmoothness * 10
+            local alpha = math.clamp(1 / math.max(smooth, 1), 0, 1)
+            if not aimbotFOVSmoothInit then
+                aimbotFOVSmoothPos = c
+                aimbotFOVSmoothInit = true
+            end
+            aimbotFOVSmoothPos = aimbotFOVSmoothPos:Lerp(c, alpha)
+            aimbotFOVContainer.Position = UDim2.fromOffset(aimbotFOVSmoothPos.X - r, aimbotFOVSmoothPos.Y - r)
+        else
+            aimbotFOVSmoothInit = false
+            aimbotFOVContainer.Position = UDim2.fromOffset(c.X - r, c.Y - r)
+        end
         if aimbotFOVCfg.FilledAnimated then
             aimbotFOVFillGrad.Rotation = math.sin(tick()*aimbotFOVCfg.FilledSpeed)*180 + aimbotFOVCfg.FilledRotation
         elseif aimbotFOVCfg.SpinOn then
@@ -7157,9 +2584,19 @@ local function shouldHitTarget()
     return math.random(1, 100) <= silentAim.hitChance
 end
 
+local fovLastScan = 0
+local fovScanInterval = 0.08
+local fovCached = nil
 local function closestinfov(radius, center)
+    local now = tick()
+    if now - fovLastScan < fovScanInterval and fovCached then
+        local hum = fovCached:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 then return fovCached end
+    end
+    fovLastScan = now
     local closest, closestDist = nil, math.huge
     local cam = Camera
+    local radiusSq = radius * radius
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local char = player.Character
@@ -7172,10 +2609,10 @@ local function closestinfov(radius, center)
                         if onScreen then
                             local dx = pos.X - center.X
                             local dy = pos.Y - center.Y
-                            local dist = math.sqrt(dx*dx + dy*dy)
-                            if dist <= radius and dist < closestDist then
+                            local distSq = dx*dx + dy*dy
+                            if distSq <= radiusSq and distSq < closestDist then
                                 closest = char
-                                closestDist = dist
+                                closestDist = distSq
                             end
                         end
                     end
@@ -7183,6 +2620,7 @@ local function closestinfov(radius, center)
             end
         end
     end
+    fovCached = closest
     return closest
 end
 
@@ -7195,7 +2633,7 @@ end
 
 local localFighter   = nil
 local lastFireTime   = 0
-local fireCooldown   = 0.05
+local fireCooldown   = 0
 
 local function firesilent()
     if not silentAim.enabled then return end
@@ -7203,7 +2641,6 @@ local function firesilent()
     if cw and weaponstricted(cw) then return end
     local now = tick()
     if now - lastFireTime < fireCooldown then return end
-    if not shouldHitTarget() then return end
     local closest = closestplayerinfov(silentAim.fovRadius)
     if not closest then return end
     local tp = Players:GetPlayerFromCharacter(closest)
@@ -7218,12 +2655,26 @@ local function firesilent()
     local objId = equipped:Get("ObjectID")
     if not objId then return end
     lastFireTime  = now
-    local shootPos  = root.Position
+    local cam = workspace.CurrentCamera
+    local shootPos  = cam and cam.CFrame.Position or root.Position
     local targetPos = part.Position
+    local hitRoll = shouldHitTarget()
+    if not hitRoll then
+        if cam then
+            local missOffset = Vector3.new(
+                (math.random() - 0.5) * 20,
+                (math.random() - 0.5) * 20,
+                (math.random() - 0.5) * 10
+            )
+            targetPos = cam.CFrame.Position + cam.CFrame.LookVector * 100 + missOffset
+        end
+    end
+    local aimDir = (targetPos - shootPos).Unit
+    local aimCFrame = CFrame.lookAt(shootPos, shootPos + aimDir)
     local data = {
         [utf8.char(1)] = {
-            [utf8.char(0)] = Utility:EncodeCFrame(CFrame.new(shootPos, targetPos)),
-            [utf8.char(1)] = Utility:EncodeCFrame(CFrame.new(shootPos, targetPos)),
+            [utf8.char(0)] = Utility:EncodeCFrame(aimCFrame),
+            [utf8.char(1)] = Utility:EncodeCFrame(aimCFrame),
             [utf8.char(2)] = part,
             [utf8.char(3)] = Utility:EncodeCFrame(CFrame.new(0.43, 0.25, 0.42)),
         },
@@ -7240,6 +2691,9 @@ end
 
 RunService.Heartbeat:Connect(function()
     if silentAim.enabled then
+        if getgenv()._rageDelayActive then return end
+        local config = getgenv().rageConfig
+        if config and config.target and config.target.enabled and not getgenv()._rageCanShoot then return end
         if silentAim.autoShoot or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
             firesilent()
         end
@@ -7247,11 +2701,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 
-repeat task.wait(0.1) until game:IsLoaded()
-repeat task.wait(0.1) until LocalPlayer.Parent
-repeat task.wait(0.1) until LocalPlayer:FindFirstChild("PlayerScripts")
-task.wait(0.8)
-LocalPlayer:WaitForChild("PlayerScripts", 10)
+repeat task.wait() until game:IsLoaded() and LocalPlayer.Parent and LocalPlayer:FindFirstChild("PlayerScripts")
 
 local camController
 pcall(function()
@@ -7271,7 +2721,7 @@ local function clearAimbotLock()
 end
 
 local function getAimbotScreenPoint()
-    if aimbot.followMuzzle then
+    if aimbot.followTarget or aimbot.followMuzzle then
         return aimbotfovcenter()
     end
     local loc = UserInputService:GetMouseLocation()
@@ -7285,10 +2735,28 @@ local function closesttocursor()
         return nil
     end
     local cam = workspace.CurrentCamera or Camera
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myPos = myRoot and myRoot.Position
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local part = p.Character:FindFirstChild(aimbot.targetPart)
             if part and part:IsDescendantOf(workspace) then
+                if aimbot.wallCheck and myPos then
+                    local params = RaycastParams.new()
+                    params.FilterDescendantsInstances = { myChar }
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    local dir = part.Position - myPos
+                    local result = workspace:Raycast(myPos, dir, params)
+                    if result then
+                        local hitPart = result.Instance
+                        local hitModel = hitPart and hitPart:FindFirstAncestorOfClass("Model")
+                        local hitPlayer = hitModel and Players:GetPlayerFromCharacter(hitModel)
+                        if not hitPlayer or hitPlayer ~= p then
+                            continue
+                        end
+                    end
+                end
                 local scr, on = worldToScreen(part.Position, cam)
                 if on then
                     local dx = scr.X - mp.X
@@ -7362,6 +2830,28 @@ local function stepAimbot(dt)
     if not aimbot.lockedTarget.Parent or not aimbot.lockedTarget:IsDescendantOf(workspace) then
         clearAimbotLock()
         return
+    end
+
+    if aimbot.wallCheck then
+        local myChar2 = LocalPlayer.Character
+        local myRoot2 = myChar2 and myChar2:FindFirstChild("HumanoidRootPart")
+        if myRoot2 then
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = { myChar2 }
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            local dir = aimbot.lockedTarget.Position - myRoot2.Position
+            local result = workspace:Raycast(myRoot2.Position, dir, params)
+            if result then
+                local hitPart = result.Instance
+                local hitModel = hitPart and hitPart:FindFirstAncestorOfClass("Model")
+                local hitPlayer = hitModel and Players:GetPlayerFromCharacter(hitModel)
+                local targetPlayer = Players:GetPlayerFromCharacter(aimbot.lockedTarget:FindFirstAncestorOfClass("Model"))
+                if not hitPlayer or hitPlayer ~= targetPlayer then
+                    clearAimbotLock()
+                    return
+                end
+            end
+        end
     end
 
     local myChar = LocalPlayer.Character
@@ -7442,15 +2932,6 @@ end
 
 local function backshoot2()
     if backshoot.connection then backshoot.connection:Disconnect() end
-    backshoot.connection = RunService.Heartbeat:Connect(function()
-        local myChar = LocalPlayer.Character
-        if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
-        if not backshoot.target then return end
-        local tr = backshoot.target:FindFirstChild("HumanoidRootPart")
-        if not tr then return end
-        local behind = tr.Position + (-tr.CFrame.LookVector*5)
-        myChar.HumanoidRootPart.CFrame = CFrame.new(behind, tr.Position)
-    end)
 end
 
 local function stopbs()
@@ -7549,26 +3030,16 @@ task.spawn(function()
 end)
 
 
-silenttab:AddToggle("SilentAim", {
+silentAimBox:AddToggle("SilentAim", {
     Text     = "enable",
     Default  = false,
     Callback = function(val)
         silentAim.enabled = val
         if not val then curtarget = nil end
     end
-}):AddKeyPicker("SilentAimKey", {
-    Text     = "Silent Aim",
-    Default  = "None",
-    Mode     = "Toggle",
-    NoUI     = true,
-    SyncToggleState = false,
-    Callback = function(state)
-        silentAim.enabled = state
-        if not state then curtarget = nil end
-    end
 })
 
-silenttab:AddToggle("BackshootToggle", {
+silentAimBox:AddToggle("BackshootToggle", {
     Text     = "backshoot",
     Default  = false,
     Callback = function(val)
@@ -7590,52 +3061,25 @@ silenttab:AddToggle("BackshootToggle", {
             end
         end
     end
-}):AddKeyPicker("SelectTargetKey", {
-    Text     = "Backshoot",
-    Default  = "None",
-    Mode     = "Toggle",
-    NoUI     = true,
-    SyncToggleState = false,
-    Callback = function(state)
-        if not state then return end
-        local mc = LocalPlayer.Character
-        if not mc or not mc:FindFirstChild("HumanoidRootPart") then return end
-        if backshoot.target then
-            if backshoot.origCFrame then mc.HumanoidRootPart.CFrame = backshoot.origCFrame end
-            backshoot.target = nil
-            stopbs()
-            if backshootCheckConn then
-                backshootCheckConn:Disconnect()
-                backshootCheckConn = nil
-            end
-        else
-            backshoot.target = closestplayerbs()
-            if backshoot.target then
-                backshoot.origCFrame = mc.HumanoidRootPart.CFrame
-                if backshoot.enabled then backshoot2() end
-                startBackshootMonitor()
-            end
-        end
-    end
 })
 
-silenttab:AddToggle("AntiKatana", {
+silentAimBox:AddToggle("AntiKatana", {
     Text     = "anti katana",
     Default  = false,
     Callback = function(val) antikatana = val end
 })
 
-silenttab:AddSlider("HitChance", {
+silentAimBox:AddSlider("HitChance", {
     Text     = "hit chance",
     Default  = 100,
     Min      = 0,
     Max      = 100,
     Rounding = 0,
     Compact  = true,
-    Callback = function(val) silentAim.hitChance = val end
+    Callback = function(val) silentAim.hitChance = tonumber(val) or 100 end
 })
 
-silenttab:AddDropdown("HitPartDropdown", {
+silentAimBox:AddDropdown("HitPartDropdown", {
     Text     = "hit part",
     Default  = "Head",
     Values   = HPlist,
@@ -7643,7 +3087,7 @@ silenttab:AddDropdown("HitPartDropdown", {
 })
 
 
-silentcustomization:AddToggle("ShowFOV", {
+silentCustBox:AddToggle("ShowFOV", {
     Text     = "show fov",
     Default  = false,
     Callback = function(val) silentFOVContainer.Visible = val end
@@ -7657,7 +3101,7 @@ silentcustomization:AddToggle("ShowFOV", {
     Callback = function(val) silentFOVCfg.OutlineColor2 = val; silentlinegrad() end
 })
 
-silentcustomization:AddToggle("SilentFOVFilled", {
+silentCustBox:AddToggle("SilentFOVFilled", {
     Text     = "fov fill",
     Default  = false,
     Callback = function(val) silentFOVCfg.FilledEnabled = val; silentFOVFill.Visible = val end
@@ -7671,7 +3115,7 @@ silentcustomization:AddToggle("SilentFOVFilled", {
     Callback = function(val) silentFOVCfg.FilledColor2 = val; updsilentgrad() end
 })
 
-silentcustomization:AddToggle("SilentFOVFillAnimated", {
+silentCustBox:AddToggle("SilentFOVFillAnimated", {
     Text     = "animated fill",
     Default  = false,
     Callback = function(val)
@@ -7680,7 +3124,7 @@ silentcustomization:AddToggle("SilentFOVFillAnimated", {
     end
 })
 
-silentcustomization:AddSlider("FOVRadius", {
+silentCustBox:AddSlider("FOVRadius", {
     Text     = "fov radius",
     Default  = 100,
     Min      = 10,
@@ -7690,7 +3134,7 @@ silentcustomization:AddSlider("FOVRadius", {
     Callback = function(val) silentAim.fovRadius = val end
 })
 
-silentcustomization:AddSlider("SilentFOVOutlineThickness", {
+silentCustBox:AddSlider("SilentFOVOutlineThickness", {
     Text     = "outline thickness",
     Default  = 1.5,
     Min      = 0.5,
@@ -7700,7 +3144,7 @@ silentcustomization:AddSlider("SilentFOVOutlineThickness", {
     Callback = function(val) silentFOVCfg.OutlineThickness = val; silentFOVStroke.Thickness = val end
 })
 
-silentcustomization:AddSlider("SilentFOVOutlineTransparency", {
+silentCustBox:AddSlider("SilentFOVOutlineTransparency", {
     Text     = "outline transparency",
     Default  = 0,
     Min      = 0,
@@ -7710,7 +3154,7 @@ silentcustomization:AddSlider("SilentFOVOutlineTransparency", {
     Callback = function(val) silentFOVCfg.OutlineTransparency = val; silentFOVStroke.Transparency = val end
 })
 
-silentcustomization:AddSlider("SilentFOVOutlineRotation", {
+silentCustBox:AddSlider("SilentFOVOutlineRotation", {
     Text     = "outline rotation",
     Default  = 0,
     Min      = 0,
@@ -7720,7 +3164,7 @@ silentcustomization:AddSlider("SilentFOVOutlineRotation", {
     Callback = function(val) silentFOVCfg.OutlineRotation = val; silentFOVStrokeGrad.Rotation = val end
 })
 
-silentcustomization:AddSlider("SilentFOVFillTransparency", {
+silentCustBox:AddSlider("SilentFOVFillTransparency", {
     Text     = "fill transparency",
     Default  = 0.7,
     Min      = 0,
@@ -7730,7 +3174,7 @@ silentcustomization:AddSlider("SilentFOVFillTransparency", {
     Callback = function(val) silentFOVCfg.FilledTransparency = val; silentFOVFill.BackgroundTransparency = val end
 })
 
-silentcustomization:AddSlider("SilentFOVFillRotation", {
+silentCustBox:AddSlider("SilentFOVFillRotation", {
     Text     = "fill rotation",
     Default  = 0,
     Min      = 0,
@@ -7743,7 +3187,7 @@ silentcustomization:AddSlider("SilentFOVFillRotation", {
     end
 })
 
-silentcustomization:AddSlider("SilentFOVFillSpeed", {
+silentCustBox:AddSlider("SilentFOVFillSpeed", {
     Text     = "fill speed",
     Default  = 1,
     Min      = 0.1,
@@ -7753,7 +3197,7 @@ silentcustomization:AddSlider("SilentFOVFillSpeed", {
     Callback = function(val) silentFOVCfg.FilledSpeed = val end
 })
 
-silentcustomization:AddToggle("SilentFOVSpin", {
+silentCustBox:AddToggle("SilentFOVSpin", {
     Text     = "fov spin",
     Default  = false,
     Callback = function(val)
@@ -7767,7 +3211,7 @@ silentcustomization:AddToggle("SilentFOVSpin", {
     end
 })
 
-silentcustomization:AddSlider("SilentFOVSpinSpd", {
+silentCustBox:AddSlider("SilentFOVSpinSpd", {
     Text     = "spin speed",
     Default  = 1,
     Min      = 0.1,
@@ -7777,23 +3221,38 @@ silentcustomization:AddSlider("SilentFOVSpinSpd", {
     Callback = function(val) silentFOVCfg.SpinSpd = val end
 })
 
-silentcustomization:AddToggle("SilentFOVFollowMuzzle", {
+silentCustBox:AddToggle("SilentFOVFollowMuzzle", {
     Text     = "follow muzzle",
     Default  = false,
     Callback = function(val) silentAim.followMuzzle = val end
 })
 
+silentCustBox:AddToggle("SilentFOVFollowTarget", {
+    Text     = "follow target",
+    Default  = false,
+    Callback = function(val) silentAim.followTarget = val end
+})
 
-aimbotTab:AddToggle("AimbotToggle", {
+silentCustBox:AddSlider("SilentFOVFollowSmooth", {
+    Text     = "follow smoothness",
+    Default  = 0,
+    Min      = 0,
+    Max      = 15,
+    Rounding = 0,
+    Suffix   = '',
+    Callback = function(val) silentAim.followTargetSmoothness = val end
+})
+
+aimbotBox:AddToggle("AimbotToggle", {
     Text = "enable",
     Default = false,
     Callback = function(val)
         aimbot.masterEnabled = val
+        aimbot.enabled = val
         if not val then
-            aimbot.enabled = false
             clearAimbotLock()
-            updaimbot()
         end
+        updaimbot()
     end
 }):AddKeyPicker("AimbotKey", {
     Text = "Aimbot",
@@ -7803,8 +3262,7 @@ aimbotTab:AddToggle("AimbotToggle", {
     SyncToggleState = false,
     Modes = { "Toggle", "Hold" },
     Callback = function(state)
-        local picker = Options and Options.AimbotKey
-        if not picker or picker.Mode ~= "Toggle" or not aimbot.masterEnabled then return end
+        if not aimbot.masterEnabled then return end
         aimbot.enabled = state
         if not state then
             clearAimbotLock()
@@ -7813,29 +3271,15 @@ aimbotTab:AddToggle("AimbotToggle", {
     end
 })
 
-RunService.RenderStepped:Connect(function()
-    local picker = Options and Options.AimbotKey
-    if not picker then return end
-
-    local mode = picker.Mode and string.lower(picker.Mode) or "toggle"
-    if mode ~= aimbot.keyMode then
-        aimbot.keyMode = mode
-        aimbot.enabled = false
-        clearAimbotLock()
-        updaimbot()
+aimbotBox:AddToggle("AimbotWallCheck", {
+    Text = "wall check",
+    Default = false,
+    Callback = function(val)
+        aimbot.wallCheck = val
     end
+})
 
-    if mode ~= "hold" or not aimbot.masterEnabled then return end
-    local held = picker:GetState()
-    if held == aimbot.enabled then return end
-    aimbot.enabled = held
-    if not held then
-        clearAimbotLock()
-    end
-    updaimbot()
-end)
-
-aimbotTab:AddSlider("AimbotSmoothness", {
+aimbotBox:AddSlider("AimbotSmoothness", {
     Text = "smoothness",
     Default = 2,
     Min = 0.1,
@@ -7847,7 +3291,7 @@ aimbotTab:AddSlider("AimbotSmoothness", {
     end
 })
 
-aimbotTab:AddDropdown("AimbotCurve", {
+aimbotBox:AddDropdown("AimbotCurve", {
     Text = "aim curve",
     Default = "Linear",
     Values = { "Linear", "Expo", "EaseIn", "EaseOut", "EaseInOut", "Cubic", "Instant" },
@@ -7856,14 +3300,14 @@ aimbotTab:AddDropdown("AimbotCurve", {
     end
 })
 
-aimbotTab:AddDropdown("AimbotHitPart", {
+aimbotBox:AddDropdown("AimbotHitPart", {
     Text="hit part", Default="Head",
     Values={"Head","HumanoidRootPart","Torso","UpperTorso","LowerTorso"},
     Callback=function(val) aimbot.targetPart=val end
 })
 
 
-aimbotCustomTab:AddToggle("ShowAimbotFOV", {
+aimbotCustBox:AddToggle("ShowAimbotFOV", {
     Text="show fov", Default=false,
     Callback=function(val)
         aimbot.showFov=val
@@ -7877,7 +3321,7 @@ aimbotCustomTab:AddToggle("ShowAimbotFOV", {
     Callback=function(val) aimbotFOVCfg.OutlineColor2=val; updaimbotoutlinegrad() end
 })
 
-aimbotCustomTab:AddToggle("AimbotFOVFilled", {
+aimbotCustBox:AddToggle("AimbotFOVFilled", {
     Text="fov fill", Default=false,
     Callback=function(val) aimbotFOVCfg.FilledEnabled=val; aimbotFOVFill.Visible=val end
 }):AddColorPicker("AimbotFOVFillColor1", {
@@ -7888,7 +3332,7 @@ aimbotCustomTab:AddToggle("AimbotFOVFilled", {
     Callback=function(val) aimbotFOVCfg.FilledColor2=val; updaimbotfillgrad() end
 })
 
-aimbotCustomTab:AddToggle("AimbotFOVFillAnimated", {
+aimbotCustBox:AddToggle("AimbotFOVFillAnimated", {
     Text="animated fill", Default=false,
     Callback=function(val)
         aimbotFOVCfg.FilledAnimated=val
@@ -7896,32 +3340,32 @@ aimbotCustomTab:AddToggle("AimbotFOVFillAnimated", {
     end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOV", {
+aimbotCustBox:AddSlider("AimbotFOV", {
     Text="fov radius", Default=500, Min=10, Max=1000, Rounding=0, Compact=true,
     Callback=function(val) aimbot.fovRadius=val end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVOutlineThickness", {
+aimbotCustBox:AddSlider("AimbotFOVOutlineThickness", {
     Text="outline thickness", Default=1.5, Min=0.5, Max=5, Rounding=1, Compact=true,
     Callback=function(val) aimbotFOVCfg.OutlineThickness=val; aimbotFOVStroke.Thickness=val end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVOutlineTransparency", {
+aimbotCustBox:AddSlider("AimbotFOVOutlineTransparency", {
     Text="outline transparency", Default=0, Min=0, Max=1, Rounding=2, Compact=true,
     Callback=function(val) aimbotFOVCfg.OutlineTransparency=val; aimbotFOVStroke.Transparency=val end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVOutlineRotation", {
+aimbotCustBox:AddSlider("AimbotFOVOutlineRotation", {
     Text="outline rotation", Default=0, Min=0, Max=360, Rounding=0, Compact=true,
     Callback=function(val) aimbotFOVCfg.OutlineRotation=val; aimbotFOVStrokeGrad.Rotation=val end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVFillTransparency", {
+aimbotCustBox:AddSlider("AimbotFOVFillTransparency", {
     Text="fill transparency", Default=0.7, Min=0, Max=1, Rounding=2, Compact=true,
     Callback=function(val) aimbotFOVCfg.FilledTransparency=val; aimbotFOVFill.BackgroundTransparency=val end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVFillRotation", {
+aimbotCustBox:AddSlider("AimbotFOVFillRotation", {
     Text="fill rotation", Default=0, Min=0, Max=360, Rounding=0, Compact=true,
     Callback=function(val)
         aimbotFOVCfg.FilledRotation=val
@@ -7929,12 +3373,12 @@ aimbotCustomTab:AddSlider("AimbotFOVFillRotation", {
     end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVFillSpeed", {
+aimbotCustBox:AddSlider("AimbotFOVFillSpeed", {
     Text="fill speed", Default=1, Min=0.1, Max=10, Rounding=1, Compact=true,
     Callback=function(val) aimbotFOVCfg.FilledSpeed=val end
 })
 
-aimbotCustomTab:AddToggle("AimbotFOVSpin", {
+aimbotCustBox:AddToggle("AimbotFOVSpin", {
     Text="fov spin", Default=false,
     Callback=function(val)
         aimbotFOVCfg.SpinOn=val
@@ -7947,14 +3391,25 @@ aimbotCustomTab:AddToggle("AimbotFOVSpin", {
     end
 })
 
-aimbotCustomTab:AddSlider("AimbotFOVSpinSpd", {
+aimbotCustBox:AddSlider("AimbotFOVSpinSpd", {
     Text="spin speed", Default=1, Min=0.1, Max=10, Rounding=1, Compact=true,
     Callback=function(val) aimbotFOVCfg.SpinSpd=val end
 })
 
-aimbotCustomTab:AddToggle("AimbotFOVFollowMuzzle", {
+aimbotCustBox:AddToggle("AimbotFOVFollowMuzzle", {
     Text="follow muzzle", Default=false,
     Callback=function(val) aimbot.followMuzzle=val end
+})
+
+aimbotCustBox:AddToggle("AimbotFOVFollowTarget", {
+    Text="follow target", Default=false,
+    Callback=function(val) aimbot.followTarget=val end
+})
+
+aimbotCustBox:AddSlider("AimbotFOVFollowSmooth", {
+    Text="follow smoothness", Default=0,
+    Min=0, Max=15, Rounding=0, Suffix='',
+    Callback=function(val) aimbot.followTargetSmoothness=val end
 })
 
 updaimbot()
@@ -7971,6 +3426,7 @@ local Workspace = game:GetService("Workspace")
 
 getgenv().CombatMods = {
     RapidFire = false,
+    RapidFireCooldown = -0.05,
     NoSpread = false,
     NoRecoil = false,
     MaxAccuracy = false,
@@ -7981,6 +3437,12 @@ getgenv().CombatMods = {
     OriginalMeleeStartShooting = nil,
     OriginalGetSpread = nil,
     OriginalRecoil = nil,
+    NoReload = false,
+    ReloadTime = 0,
+    ProjectileSpeed = false,
+    ProjectileSpeedValue = 9999999999999999,
+    EquipCooldown = false,
+    EquipCooldownValue = 0,
 }
 
 task.spawn(function()
@@ -7996,15 +3458,40 @@ task.spawn(function()
             
             GunModule.StartShooting = function(self, p26, p27)
                 local oldShootCooldown
+                local oldProjectileSpeed
+                local oldEquipCooldown
                 if getgenv().CombatMods.RapidFire then
                     oldShootCooldown = self.Info.ShootCooldown
-                    self.Info.ShootCooldown = 0
+                    self.Info.ShootCooldown = getgenv().CombatMods.RapidFireCooldown or -0.05
+                end
+                if getgenv().CombatMods.ProjectileSpeed then
+                    pcall(function()
+                        oldProjectileSpeed = self.Info.ProjectileSpeed
+                        self.Info.ProjectileSpeed = getgenv().CombatMods.ProjectileSpeedValue
+                    end)
+                end
+                if getgenv().CombatMods.EquipCooldown then
+                    pcall(function()
+                        oldEquipCooldown = self.Info.EquipCooldown
+                        self.Info.EquipCooldown = getgenv().CombatMods.EquipCooldownValue
+                    end)
+                end
+                if getgenv().CombatMods.NoReload then
+                    pcall(function()
+                        self.Info.ReloadTime = getgenv().CombatMods.ReloadTime
+                    end)
                 end
                 
                 local result = { getgenv().CombatMods.OriginalGunStartShooting(self, p26, p27) }
                 
                 if getgenv().CombatMods.RapidFire then
                     self.Info.ShootCooldown = oldShootCooldown
+                end
+                if getgenv().CombatMods.ProjectileSpeed and oldProjectileSpeed then
+                    self.Info.ProjectileSpeed = oldProjectileSpeed
+                end
+                if getgenv().CombatMods.EquipCooldown and oldEquipCooldown then
+                    self.Info.EquipCooldown = oldEquipCooldown
                 end
                 
                 return unpack(result)
@@ -8020,6 +3507,29 @@ task.spawn(function()
                 end
                 return getgenv().CombatMods.OriginalRecoil(self, multiplier)
             end
+        end
+    end
+end)
+
+local function ModifyGunModule()
+    local gunMod = getgenv().CombatMods and getgenv().CombatMods.GunModule
+    if gunMod and gunMod.Info then
+        if getgenv().CombatMods.RapidFire then
+            gunMod.Info.ShootCooldown = getgenv().CombatMods.RapidFireCooldown or -0.05
+        end
+        if getgenv().CombatMods.NoRecoil then
+            gunMod.Info.Recoil = 0
+        end
+        if getgenv().CombatMods.NoSpread then
+            gunMod.Info.Spread = 0
+        end
+    end
+end
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if getgenv().CombatMods and (getgenv().CombatMods.RapidFire or getgenv().CombatMods.NoRecoil or getgenv().CombatMods.NoSpread) then
+            ModifyGunModule()
         end
     end
 end)
@@ -8117,6 +3627,18 @@ LeftGroup:AddToggle("NoCooldown", {
     end
 })
 
+LeftGroup:AddSlider("RapidFireValue", {
+    Text = "rapid fire value",
+    Default = -20,
+    Min = -100,
+    Max = 0,
+    Rounding = 1,
+    Compact = true,
+    Callback = function(val)
+        getgenv().CombatMods.RapidFireCooldown = val
+    end
+})
+
 LeftGroup:AddToggle("NoSpread", {
     Text = "no spread",
     Default = false,
@@ -8169,8 +3691,6 @@ LeftGroup:AddToggle("NoMuzzleFlash", {
 })
 end
 
-HitGroup = Tabs.World:AddRightTabbox()
-
 getDamageBillboardInfo = function(obj)
     local cached = damageBillboardInfoCache[obj]
     if cached ~= nil then
@@ -8209,16 +3729,14 @@ getDamageBillboardInfo = function(obj)
     return info
 end
 
-(function()
+;(function()
 
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
 local fonts = {}
-fonts.main = getgenv().InstanceUIFont or Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Black)
-
-local hitEffectsTab = HitGroup:AddTab('hit effects')
-
+local instanceUIFont = getgenv().InstanceUIFont
+fonts.main = (typeof(instanceUIFont) == "Font" and instanceUIFont) or (instanceUIFont and Font.fromEnum(instanceUIFont)) or Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular)
 local hitEffectEnabled = false
 local hitEffectColor = Color3.fromRGB(159, 133, 195)
 local hitEffectStyle = {Particles = true}
@@ -8226,7 +3744,7 @@ local hitEffectFloatSpeed = 7
 local hitEffectAliveTime = 2.8
 local hitEffectAliveScale = 1
 
-local hitEffectsToggle = hitEffectsTab:AddToggle("HitEffects", {
+local hitEffectsToggle = hitEffectsBox:AddToggle("HitEffects", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -8242,7 +3760,7 @@ hitEffectsToggle:AddColorPicker("HitEffectColorPicker", {
     end
 })
 
-local hitEffectDepBox = hitEffectsTab:AddDependencyBox()
+local hitEffectDepBox = hitEffectsBox:AddDependencyBox()
 
 hitEffectDepBox:AddSlider("HitEffectFloatSpeed", {
     Text = "float speed",
@@ -8268,11 +3786,33 @@ hitEffectDepBox:AddSlider("HitEffectAliveTime", {
     end
 })
 
+local FORTNIGHT_FONT_URL = "https://raw.githubusercontent.com/ziannebanoragy/instanceALPHA/refs/heads/main/fortnight.otf"
+local FORTNIGHT_FONT_FILE = "hit_fortnight.otf"
+local FORTNIGHT_FONT_FONT_FILE = "hit_fortnight.font"
+local hitEffectFont = fonts.main
+
+local function loadFortnightFont()
+    if not isfile or not writefile or not getcustomasset then return end
+    local ok, result = pcall(function()
+        if not isfile(FORTNIGHT_FONT_FILE) then
+            writefile(FORTNIGHT_FONT_FILE, game:HttpGet(FORTNIGHT_FONT_URL))
+        end
+        if isfile(FORTNIGHT_FONT_FONT_FILE) then delfile(FORTNIGHT_FONT_FONT_FILE) end
+        local fontdata = { name = "HitFortnight", faces = {{ name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(FORTNIGHT_FONT_FILE) }} }
+        writefile(FORTNIGHT_FONT_FONT_FILE, HttpService:JSONEncode(fontdata))
+        return Font.new(getcustomasset(FORTNIGHT_FONT_FONT_FILE))
+    end)
+    if ok and result then
+        hitEffectFont = result
+    end
+end
+loadFortnightFont()
+
 hitEffectDepBox:SetupDependencies({
     { hitEffectsToggle, true }
 })
 
-hitEffectsTab:AddDropdown("HitEffectStyleDropdown", {
+hitEffectsBox:AddDropdown("HitEffectStyleDropdown", {
     Text = "style",
     Default = {"Particles"},
     Values = {
@@ -8386,6 +3926,20 @@ local function spawnHitFlash(targetPart, color, brightness, range, duration)
     end)
 end
 
+local function getActiveParticles()
+    local count = 0
+    local function countInInstance(inst)
+        for _, child in ipairs(inst:GetChildren()) do
+            if child:IsA("ParticleEmitter") then
+                count = count + 1
+            end
+            countInInstance(child)
+        end
+    end
+    countInInstance(workspace.CurrentCamera)
+    return count
+end
+
 local function spawnHitEmitter(targetPart, config)
     if getActiveParticles() >= MAX_ACTIVE_PARTICLES then
         return nil
@@ -8468,10 +4022,10 @@ local function particledesign(adornee, color)
     end)
 end
 
+local MAX_ACTIVE_PARTICLES = 120
 local activeposes = {}
 local MIN_DIST = 5.5
 local MAX_ACTIVE_HIT_EFFECTS = 45
-local MAX_ACTIVE_PARTICLES = 120
 local maxEffectsReached = false
 
 local X_MIN, X_MAX = -10, 10
@@ -8523,20 +4077,6 @@ local function getActiveFortniteBillboards()
     return count
 end
 
-local function getActiveParticles()
-    local count = 0
-    local function countInInstance(inst)
-        for _, child in ipairs(inst:GetChildren()) do
-            if child:IsA("ParticleEmitter") then
-                count = count + 1
-            end
-            countInInstance(child)
-        end
-    end
-    countInInstance(workspace.CurrentCamera)
-    return count
-end
-
 local function fortniteffect(adornee, color, damageText)
     color = color or hitEffectColor
 
@@ -8582,7 +4122,7 @@ local function fortniteffect(adornee, color, damageText)
     lbl.TextStrokeColor3 = Color3.new(0, 0, 0)
     lbl.TextStrokeTransparency = 1
     lbl.TextScaled = true
-    lbl.FontFace = fonts.main
+    lbl.FontFace = hitEffectFont
     lbl.ZIndex = 1
 
     local fadeOutTime = scaleHitDuration(0.5)
@@ -9118,8 +4658,6 @@ end
 
 do
 
-local hitSoundsTab = HitGroup:AddTab('hit sounds')
-
 local hitSoundEnabled = false
 local hitSoundStyle = "Rust HS"
 local hitSoundVolume = 0.5
@@ -9201,7 +4739,7 @@ local function playHS()
     end)
 end
 
-hitSoundsTab:AddToggle("HitSounds", {
+hitSoundsBox:AddToggle("HitSounds", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -9211,7 +4749,7 @@ hitSoundsTab:AddToggle("HitSounds", {
 
 local soundDropdown
 
-hitSoundsTab:AddInput("SoundSearch", {
+hitSoundsBox:AddInput("SoundSearch", {
     Text = "search sounds",
     Placeholder = "",
     ClearTextOnFocus = false,
@@ -9237,7 +4775,7 @@ hitSoundsTab:AddInput("SoundSearch", {
     end
 })
 
-soundDropdown = hitSoundsTab:AddDropdown("SoundStyleDropdown", {
+soundDropdown = hitSoundsBox:AddDropdown("SoundStyleDropdown", {
     Text = "sound",
     Default = "Rust HS",
     Values = allSounds,
@@ -9246,7 +4784,7 @@ soundDropdown = hitSoundsTab:AddDropdown("SoundStyleDropdown", {
     end
 })
 
-hitSoundsTab:AddSlider("SoundVolume", {
+hitSoundsBox:AddSlider("SoundVolume", {
     Text = "volume",
     Default = 50,
     Min = 1,
@@ -9258,7 +4796,7 @@ hitSoundsTab:AddSlider("SoundVolume", {
     end
 })
 
-hitSoundsTab:AddSlider("SoundPitch", {
+hitSoundsBox:AddSlider("SoundPitch", {
     Text = "pitch",
     Default = 100,
     Min = 50,
@@ -9270,7 +4808,7 @@ hitSoundsTab:AddSlider("SoundPitch", {
     end
 })
 
-hitSoundsTab:AddToggle("DisableGunSounds", {
+hitSoundsBox:AddToggle("DisableGunSounds", {
     Text = "disable gun sounds",
     Default = _G.Features.DisableGunSounds,
     Callback = function(val)
@@ -9298,11 +4836,10 @@ end)
 
 end
 
-do
+;(function()
 
-local ViewModelTabbox = Tabs.World:AddRightTabbox()
-local vmTab = ViewModelTabbox:AddTab("view model")
-local viewportTab = ViewModelTabbox:AddTab("viewport")
+local vmBox = Tabs.World:AddRightGroupbox('view model')
+local viewportBox = Tabs.World:AddRightGroupbox('viewport')
 
 local gunChamsEnabled = false
 local armChamsEnabled = false
@@ -9357,7 +4894,7 @@ local chamOutlineGlowClones = {}
 local chamOutlineBloomClones = {}
 local chamOutlineStore = Instance.new("Folder")
 chamOutlineStore.Name = "\0ChamOutlines"
-chamOutlineStore.Parent = game.CoreGui
+chamOutlineStore.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 local OUTLINE_EXCLUDED_PARTS = {
     ChamOutlineShell = true,
@@ -9504,41 +5041,6 @@ local function gradcolor(c1, c2, c3, pos, t)
     end
 end
 
-local function getModelYBounds(model)
-    local minY, maxY = math.huge, -math.huge
-    for _, d in ipairs(model:GetDescendants()) do
-        if d:IsA("BasePart") then
-            minY = math.min(minY, d.Position.Y)
-            maxY = math.max(maxY, d.Position.Y)
-        end
-    end
-    if minY == math.huge then
-        return 0, 1
-    end
-    return minY, maxY
-end
-
-local function getFilteredModelYBounds(model, partFilter)
-    local minY, maxY = math.huge, -math.huge
-    for _, d in ipairs(model:GetDescendants()) do
-        if d:IsA("BasePart") and partFilter(d) then
-            minY = math.min(minY, d.Position.Y)
-            maxY = math.max(maxY, d.Position.Y)
-        end
-    end
-    if minY == math.huge then
-        return 0, 1
-    end
-    return minY, maxY
-end
-
-local function verticalChamColor(part, model, topColor, bottomColor, yBounds)
-    local minY, maxY = yBounds[1], yBounds[2]
-    local range = math.max(maxY - minY, 0.001)
-    local t = math.clamp((part.Position.Y - minY) / range, 0, 1)
-    return lerpColor(bottomColor, topColor, t)
-end
-
 local function animatedHighlightColor(topColor, bottomColor, phase)
     local t = phase * 2
     if t > 1 then
@@ -9654,26 +5156,6 @@ local function buildChamOutlineGlow(anchorPart, sourcePart, cloneTable, name, sc
     if glow:IsA("BasePart") then
         glow.Size = anchorPart.Size * scale + padding
     end
-end
-
-local function syncChamOutlineGlow(part, color, strength)
-    if not part or not part.Parent then
-        clearChamOutlineGlow(part)
-        return
-    end
-    local s = math.clamp((tonumber(strength) or 5) / 10, 0, 1)
-    local innerScale = 1.02 + s * 0.07
-    local bloomScale = 1.06 + s * 0.2
-    local innerTrans = math.clamp(0.55 - s * 0.4, 0.05, 0.95)
-    local bloomTrans = math.clamp(0.88 - s * 0.55, 0.08, 0.95)
-    local innerPad = Vector3.new(0.008, 0.008, 0.008) + Vector3.new(0.02, 0.02, 0.02) * s
-    local bloomPad = Vector3.new(0.02, 0.02, 0.02) + Vector3.new(0.06, 0.06, 0.06) * s
-    buildChamOutlineGlow(part, part, chamOutlineGlowClones, "ChamOutlineGlow", innerScale, innerTrans, innerPad)
-    buildChamOutlineGlow(part, part, chamOutlineBloomClones, "ChamOutlineBloom", bloomScale, bloomTrans, bloomPad)
-    local inner = chamOutlineGlowClones[part]
-    local bloom = chamOutlineBloomClones[part]
-    if inner then inner.Color = color end
-    if bloom then bloom.Color = color end
 end
 
 local function syncChamOutline(part, color)
@@ -10164,7 +5646,7 @@ local function stopViewportLoop()
     end
 end
 
-viewportTab:AddToggle("EnableViewport", {Text = "enable", Default = false, Callback = function(v)
+viewportBox:AddToggle("EnableViewport", {Text = "enable", Default = false, Callback = function(v)
     viewportEnabled = v
     if v then
         viewportloop()
@@ -10173,7 +5655,7 @@ viewportTab:AddToggle("EnableViewport", {Text = "enable", Default = false, Callb
     end
 end})
 
-viewportTab:AddDualSlider('OffsetX', 'OffsetY', {
+viewportBox:AddSlider('OffsetX', {
     Text = 'x',
     Default = 0,
     Min = -10,
@@ -10181,7 +5663,8 @@ viewportTab:AddDualSlider('OffsetX', 'OffsetY', {
     Rounding = 2,
     Compact = true,
     Callback = function(v) offsetX = v end
-}, {
+})
+viewportBox:AddSlider('OffsetY', {
     Text = 'y',
     Default = 0,
     Min = -10,
@@ -10191,7 +5674,7 @@ viewportTab:AddDualSlider('OffsetX', 'OffsetY', {
     Callback = function(v) offsetY = v end
 })
 
-viewportTab:AddSlider("OffsetZ", {Text = "z", Default = 0, Min = -10, Max = 10, Rounding = 2, Compact = true, Callback = function(v) offsetZ = v end})
+viewportBox:AddSlider("OffsetZ", {Text = "z", Default = 0, Min = -10, Max = 10, Rounding = 2, Compact = true, Callback = function(v) offsetZ = v end})
 
 local noAnimationsEnabled = false
 local noAnimBlocked = {}
@@ -10341,7 +5824,9 @@ local function updNoAnimations()
     end
 end
 
-local noAnimToggle = viewportTab:AddToggle("NoAnimations", {
+local mats = { "ForceField", "Neon", "SmoothPlastic", "Glass", "Ice", "Plastic", "Wood", "Marble", "Granite", "Brick", "Cobblestone", "Concrete", "Slate", "Foil" }
+
+local noAnimToggle = viewportBox:AddToggle("NoAnimations", {
     Text = "no animations",
     Default = false,
     Callback = function(v)
@@ -10350,7 +5835,7 @@ local noAnimToggle = viewportTab:AddToggle("NoAnimations", {
     end,
 })
 
-local noAnimDepBox = viewportTab:AddDependencyBox()
+local noAnimDepBox = viewportBox:AddDependencyBox()
 noAnimDepBox:AddDropdown("NoAnimationsList", {
     Text = "disabled animations",
     Values = { "Idle", "Reloading", "Sprinting", "Crouching", "Shooting", "Aiming" },
@@ -10364,9 +5849,9 @@ noAnimDepBox:SetupDependencies({
     { noAnimToggle, true },
 })
 
-local mats = { "ForceField", "Neon", "SmoothPlastic", "Glass", "Ice", "Plastic", "Wood", "Marble", "Granite", "Brick", "Cobblestone", "Concrete", "Slate", "Foil" }
+;(function()
 
-local gunChamsToggle = vmTab:AddToggle("GunChams", {
+local gunChamsToggle = vmBox:AddToggle("GunChams", {
     Text = "gun chams",
     Default = false,
     Callback = function(v)
@@ -10387,7 +5872,7 @@ local gunChamsToggle = vmTab:AddToggle("GunChams", {
     Callback = function(v) gunColor3 = v end,
 })
 
-local gunChamsDep = vmTab:AddDependencyBox()
+local gunChamsDep = vmBox:AddDependencyBox()
 gunChamsDep:AddDropdown("GunMaterial", {
     Text = "gun material",
     Default = "Neon",
@@ -10416,7 +5901,7 @@ gunChamsDep:SetupDependencies({
     { gunChamsToggle, true },
 })
 
-local armChamsToggle = vmTab:AddToggle("ArmChams", {
+local armChamsToggle = vmBox:AddToggle("ArmChams", {
     Text = "arm chams",
     Default = false,
     Callback = function(v)
@@ -10437,7 +5922,7 @@ local armChamsToggle = vmTab:AddToggle("ArmChams", {
     Callback = function(v) armColor3 = v end,
 })
 
-local armChamsDep = vmTab:AddDependencyBox()
+local armChamsDep = vmBox:AddDependencyBox()
 armChamsDep:AddDropdown("ArmMaterial", {
     Text = "arm material",
     Default = "ForceField",
@@ -10466,7 +5951,7 @@ armChamsDep:SetupDependencies({
     { armChamsToggle, true },
 })
 
-vmTab:AddToggle("GunOutline", {
+vmBox:AddToggle("GunOutline", {
     Text = "gun outline",
     Default = false,
     Callback = function(v)
@@ -10487,7 +5972,7 @@ vmTab:AddToggle("GunOutline", {
     Callback = function(v) gunOutlineColor3 = v end,
 })
 
-vmTab:AddToggle("ArmOutline", {
+vmBox:AddToggle("ArmOutline", {
     Text = "arm outline",
     Default = false,
     Callback = function(v)
@@ -10508,7 +5993,7 @@ vmTab:AddToggle("ArmOutline", {
     Callback = function(v) armOutlineColor3 = v end,
 })
 
-local gunHighlightToggle = vmTab:AddToggle("GunHighlight", {
+local gunHighlightToggle = vmBox:AddToggle("GunHighlight", {
     Text = "gun highlight",
     Default = false,
     Callback = function(v)
@@ -10525,7 +6010,7 @@ local gunHighlightToggle = vmTab:AddToggle("GunHighlight", {
     Callback = function(v) gunHighlightBottom = v end,
 })
 
-local gunHighlightDep = vmTab:AddDependencyBox()
+local gunHighlightDep = vmBox:AddDependencyBox()
 gunHighlightDep:AddDropdown("GunHighlightMaterial", {
     Text = "gun highlight material",
     Default = "Neon",
@@ -10554,7 +6039,7 @@ gunHighlightDep:SetupDependencies({
     { gunHighlightToggle, true },
 })
 
-local armHighlightToggle = vmTab:AddToggle("ArmHighlight", {
+local armHighlightToggle = vmBox:AddToggle("ArmHighlight", {
     Text = "arm highlight",
     Default = false,
     Callback = function(v)
@@ -10571,7 +6056,7 @@ local armHighlightToggle = vmTab:AddToggle("ArmHighlight", {
     Callback = function(v) armHighlightBottom = v end,
 })
 
-local armHighlightDep = vmTab:AddDependencyBox()
+local armHighlightDep = vmBox:AddDependencyBox()
 armHighlightDep:AddDropdown("ArmHighlightMaterial", {
     Text = "arm highlight material",
     Default = "Neon",
@@ -10600,7 +6085,7 @@ armHighlightDep:SetupDependencies({
     { armHighlightToggle, true },
 })
 
-vmTab:AddToggle("DisableArms", {
+vmBox:AddToggle("DisableArms", {
     Text = "disable arms",
     Default = false,
     Callback = function(v)
@@ -10609,10 +6094,14 @@ vmTab:AddToggle("DisableArms", {
     end,
 })
 
-end
+end)()
+
+end)()
 
 do
 
+local DISABLE_TRACERS = getgenv().DISABLE_TRACERS
+local findShotMuzzlePosition = getgenv().findShotMuzzlePosition
 local TracersGroup = Tabs.World:AddLeftGroupbox("bullet tracers")
 
 local tracerEnabled  = true
@@ -10898,7 +6387,7 @@ local function hookTracerEffect()
                 if mPos then
                     for _, hit in ipairs(tracerData.RaycastResults) do
                         if hit.Position then
-                            maketracer(mPos, hit.Position)
+                            pcall(maketracer, mPos, hit.Position)
                         end
                     end
                 end
@@ -11075,7 +6564,7 @@ local function getEspPlayerWeapon(player)
     return "None"
 end
 
-local ragebot = {}
+local ragebot = {} :: any
 
 do
 
@@ -11240,6 +6729,7 @@ local config = {
         weaponPick = "primary",
         forceWeapon = true,
         rageMasterOn = false,
+        rightClickKnife = false,
         meleeFeetDrop = 3.5,
         underOffset = 4,
         customHeight = 2,
@@ -11247,6 +6737,13 @@ local config = {
         customSide = 0,
         customVertical = 0,
         customRadius = 0,
+        targetSort = "nearest",
+        teamCheck = true,
+        wallCheck = false,
+        maxDistance = 0,
+        autoSwitch = true,
+        safeHP = 0,
+        holdKey = false,
     },
     prediction = {
         enabled = false,
@@ -11266,6 +6763,7 @@ local config = {
         serverpos = nil,
         connection = nil,
         speed = 9000,
+        orbitSpeed = 9000,
         height = 1,
         radius = 0,
         originalpos = nil
@@ -11290,7 +6788,12 @@ local config = {
         hide_max = 1,
         phase = nil,
         lastswitch = 0,
-        currentduration = 0
+        currentduration = 0,
+        bypassMode = "Extreme Networking"
+    },
+    backstab = {
+        enabled = false,
+        camera = false,
     },
     visualizer = {
         enabled = true,
@@ -11323,6 +6826,7 @@ local config = {
         outAnimation = "fade",
         animInDuration = 0.52,
         animOutDuration = 0.38,
+        uiNotif = false,
     },
     ragestatus = {
         enabled = false,
@@ -11335,6 +6839,12 @@ local config = {
         textSize = 15,
         lineGap = 15,
         fontName = "gotham",
+        showKills = true,
+    },
+    kills = {
+        count = 0,
+        streak = 0,
+        lastKillAt = 0,
     },
 }
 
@@ -11353,6 +6863,13 @@ local ragePerf = {
     lastRageDetailText = "",
     lastRageAmmoText = "",
     lastRageColor = nil,
+    targetAcquiredAt = 0,
+    shootDelay = 0.3,
+    delayActive = false,
+    delayTask = nil,
+    shootCooldown = 0,
+    shootReadyAt = nil,
+    canShoot = false,
 }
 
 local vhState = {
@@ -11369,7 +6886,7 @@ local oldpos
 
 local indicator = Drawing.new("Circle")
 indicator.Thickness = 1.5
-indicator.NumSides = 36
+pcall(function() indicator.NumSides = 36 end)
 indicator.Filled = false
 indicator.Transparency = 1
 indicator.Visible = false
@@ -11378,7 +6895,7 @@ indicator.Color = Color3.fromRGB(255, 50, 50)
 
 local indicatoroutline = Drawing.new("Circle")
 indicatoroutline.Thickness = 4
-indicatoroutline.NumSides = 36
+pcall(function() indicatoroutline.NumSides = 36 end)
 indicatoroutline.Filled = false
 indicatoroutline.Transparency = 1
 indicatoroutline.Visible = false
@@ -11680,13 +7197,29 @@ local function tickAmmo()
     end
 end
 
+local vfrLim, vfrDead = 2147483646, 1147483646
+local vfrSnap = { cf = nil, lv = nil, av = nil }
+
+local function clrVoidSnap()
+    vfrSnap.cf, vfrSnap.lv, vfrSnap.av = nil, nil, nil
+end
+
+local function voidHrp()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
 local function reloadHide(sling)
     if not (config.state.reloading and config.ragestatus.hideOnReload) then
         return false
     end
     local hrp = voidHrp()
     if hrp and not sling then
-        snapVoid(hrp)
+        clrVoidSnap()
+        config.orbit.serverpos = Vector3.new(-43242003453, 312391923195534, -94523844823534)
+        pcall(function()
+            hrp.CFrame = CFrame.new(config.orbit.serverpos)
+        end)
         return true
     end
     local randomX = math.random(-10000, 10000)
@@ -11711,34 +7244,112 @@ local function valid(char)
     if not humanoid or humanoid.Health <= 0 then return false end
     if not char:FindFirstChild("HumanoidRootPart") then return false end
     local targetplayer = players:GetPlayerFromCharacter(char)
-    if not targetplayer or isteammate(targetplayer) then return false end
+    if not targetplayer then return false end
+    if config.target.teamCheck and isteammate(targetplayer) then return false end
     return true
 end
 
+local function wallcheck(fromPos, toPos)
+    if not config.target.wallCheck then return true end
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {player.Character}
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local dir = toPos - fromPos
+    local result = workspace:Raycast(fromPos, dir, params)
+    if not result then return true end
+    local hitPart = result.Instance
+    if not hitPart then return true end
+    local hitChar = hitPart:FindFirstAncestorOfClass("Model")
+    if hitChar then
+        local hitPlayer = players:GetPlayerFromCharacter(hitChar)
+        if hitPlayer then return true end
+    end
+    return false
+end
+
 local function nearest()
-    local cursorpos = userinput:GetMouseLocation()
-    local besttarget = nil
-    local bestdistance = math.huge
+    local sortMode = config.target.targetSort or "nearest"
+    local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    local myPos = myRoot and myRoot.Position or Vector3.zero
+    local candidates = {}
+
     for _, targetplayer in players:GetPlayers() do
-        if targetplayer ~= player and targetplayer.Character then
-            local char = targetplayer.Character
-            if valid(char) then
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local wts = getgenv().InstanceWorldToScreen or worldToScreen
-                    local screenpos, onscreen = wts(root.Position, camera)
-                    if onscreen and screenpos then
-                        local distance = (Vector2.new(screenpos.X, screenpos.Y) - cursorpos).Magnitude
-                        if distance < bestdistance then
-                            besttarget = char
-                            bestdistance = distance
-                        end
-                    end
+        if targetplayer == player then continue end
+        if config.target.teamCheck and isteammate(targetplayer) then continue end
+        local char = targetplayer.Character
+        if not char then continue end
+        if not valid(char) then continue end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+
+        local dist = (root.Position - myPos).Magnitude
+        if config.target.maxDistance > 0 and dist > config.target.maxDistance then continue end
+
+        if config.target.wallCheck then
+            local cam = workspace.CurrentCamera
+            local eyePos = cam and cam.CFrame.Position or myPos
+            if not wallcheck(eyePos, root.Position) then continue end
+        end
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hp = hum and hum.Health or 0
+
+        table.insert(candidates, {
+            char = char,
+            root = root,
+            dist = dist,
+            hp = hp,
+            player = targetplayer,
+        })
+    end
+
+    if #candidates == 0 then return nil end
+
+    if sortMode == "farthest" then
+        local best = nil
+        for _, c in ipairs(candidates) do
+            if not best or c.dist > best.dist then best = c end
+        end
+        return best and best.char
+    elseif sortMode == "lowest hp" then
+        local best = nil
+        for _, c in ipairs(candidates) do
+            if not best or c.hp < best.hp then best = c end
+        end
+        return best and best.char
+    elseif sortMode == "highest hp" then
+        local best = nil
+        for _, c in ipairs(candidates) do
+            if not best or c.hp > best.hp then best = c end
+        end
+        return best and best.char
+    elseif sortMode == "closest to cursor" then
+        local cursorpos = userinput:GetMouseLocation()
+        local best, bestdist = nil, math.huge
+        for _, c in ipairs(candidates) do
+            local wts = getgenv().InstanceWorldToScreen or worldToScreen
+            local screenpos, onscreen = wts(c.root.Position, camera)
+            if onscreen and screenpos then
+                local d = (Vector2.new(screenpos.X, screenpos.Y) - cursorpos).Magnitude
+                if d < bestdist then
+                    bestdist = d
+                    best = c
                 end
             end
         end
+        return best and best.char
+    elseif sortMode == "random" then
+        return candidates[math.random(1, #candidates)].char
+    else
+        local best, bestdist = nil, math.huge
+        for _, c in ipairs(candidates) do
+            if c.dist < bestdist then
+                bestdist = c.dist
+                best = c
+            end
+        end
+        return best and best.char
     end
-    return besttarget
 end
 
 local function hitpartfromname(character, partname)
@@ -11806,6 +7417,7 @@ local function canuse()
     if not char then return false end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return false end
+    if config.target.safeHP > 0 and humanoid.Health < config.target.safeHP then return false end
     if isInfiniteWeapon() then return true end
     local current, _, melee = getammo()
     if current == nil then return true end
@@ -11828,18 +7440,6 @@ local function randVs(minT, maxT)
     return a + math.random() * (b - a)
 end
 
-local vfrLim, vfrDead = 2147483646, 1147483646
-local vfrSnap = { cf = nil, lv = nil, av = nil }
-
-local function clrVoidSnap()
-    vfrSnap.cf, vfrSnap.lv, vfrSnap.av = nil, nil, nil
-end
-
-local function voidHrp()
-    local char = player.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
-end
-
 local function rndSkip(mi, ma, dmi, dma)
     local val = math.random(mi, ma)
     while val >= dmi and val <= dma do
@@ -11855,12 +7455,28 @@ local function snapVoid(hrp)
     vfrSnap.lv = hrp.AssemblyLinearVelocity
     vfrSnap.av = hrp.AssemblyAngularVelocity
     local lim, dead = vfrLim, vfrDead
+    local p = Vector3.new(rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead))
+    local mode = config.voidspam.bypassMode or "Extreme Networking"
     pcall(function()
-        local p = Vector3.new(rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead))
-        local v = Vector3.new(rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead))
-        hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
-        hrp.AssemblyLinearVelocity = v
-        hrp.AssemblyAngularVelocity = v
+        if mode == "Velocity" then
+            local v = Vector3.new(rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead), rndSkip(-lim, lim, -dead, dead))
+            hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
+            hrp.AssemblyLinearVelocity = v
+            hrp.AssemblyAngularVelocity = v
+        elseif mode == "CFrame only" then
+            hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
+        elseif mode == "Hybrid" then
+            hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0)
+        elseif mode == "Physics Bypass" then
+            hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        else
+            hrp.CFrame = CFrame.new(p) * CFrame.Angles(math.pi, math.pi, math.pi)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
     end)
 end
 
@@ -12019,7 +7635,8 @@ local function tickVoid(sling, root)
                 config.voidspam.phase = "shoot"
                 config.voidspam.currentduration = randVs(config.voidspam.shoot_min, config.voidspam.shoot_max)
                 config.voidspam.lastswitch = tick()
-                clrVoidSnap()
+    clrVoidSnap()
+    vhState.active = false
                 return false
             end
         end
@@ -12054,21 +7671,42 @@ local function hideShot()
     if isSling(getweapon()) then return end
 end
 
-local function voidhide()
-    if vhState.active then return end
-    vhState.active = true
-    if not config.state.csyncactive then
-        startsync()
-    end
+local function applyBypassMode(rootPart, targetPos)
+    if not rootPart then return end
+    local mode = config.voidspam.bypassMode or "Extreme Networking"
+    pcall(function()
+        if mode == "Velocity" then
+            rootPart.AssemblyLinearVelocity = (targetPos - rootPart.Position) * 100
+        elseif mode == "CFrame only" then
+            rootPart.CFrame = CFrame.new(targetPos)
+        elseif mode == "Hybrid" then
+            rootPart.CFrame = CFrame.new(targetPos)
+            rootPart.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0)
+        else
+            rootPart.CFrame = CFrame.new(targetPos)
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
 end
 
-local stopvoid = function()
-    vhState.active = false
-    vhState.currentVoidPos = nil
-    if vhState.mainConnection then
-        vhState.mainConnection:Disconnect()
-        vhState.mainConnection = nil
-    end
+local function applyBypassModeCF(rootPart, targetCFrame)
+    if not rootPart then return end
+    local mode = config.voidspam.bypassMode or "Extreme Networking"
+    pcall(function()
+        if mode == "Velocity" then
+            rootPart.AssemblyLinearVelocity = (targetCFrame.Position - rootPart.Position) * 100
+        elseif mode == "CFrame only" then
+            rootPart.CFrame = targetCFrame
+        elseif mode == "Hybrid" then
+            rootPart.CFrame = targetCFrame
+            rootPart.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0)
+        else
+            rootPart.CFrame = targetCFrame
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
 end
 
 local function startsync()
@@ -12110,7 +7748,9 @@ local function startsync()
 
         if isQuickSwapActive() then return end
 
-        eqSlot()
+        if not ragePerf.delayActive then
+            eqSlot()
+        end
 
         if reloadHide(checksling) then return end
 
@@ -12120,9 +7760,8 @@ local function startsync()
                 local randomX = math.random(-10000, 10000)
                 local randomZ = math.random(-10000, 10000)
                 config.orbit.serverpos = Vector3.new(randomX, -99999999999, randomZ)
-                pcall(function()
-                    localfighter.Entity.RootPart.CFrame = CFrame.new(config.orbit.serverpos)
-                end)
+                local rp = localfighter and localfighter.Entity and localfighter.Entity.RootPart
+                if rp then applyBypassMode(rp, config.orbit.serverpos) end
                 return
             end
         end
@@ -12135,9 +7774,8 @@ local function startsync()
             local randomX = math.random(-10000, 10000)
             local randomZ = math.random(-10000, 10000)
             config.orbit.serverpos = Vector3.new(randomX, -99999999999, randomZ)
-            pcall(function()
-                localfighter.Entity.RootPart.CFrame = CFrame.new(config.orbit.serverpos)
-            end)
+            local rp = localfighter and localfighter.Entity and localfighter.Entity.RootPart
+            if rp then applyBypassMode(rp, config.orbit.serverpos) end
             return
         end
 
@@ -12159,15 +7797,23 @@ local function startsync()
                 local randomX = math.random(-10000, 10000)
                 local randomZ = math.random(-10000, 10000)
                 config.orbit.serverpos = Vector3.new(randomX, -99999999999, randomZ)
-                pcall(function()
-                    localfighter.Entity.RootPart.CFrame = CFrame.new(config.orbit.serverpos)
-                end)
+                local rp = localfighter and localfighter.Entity and localfighter.Entity.RootPart
+                if rp then applyBypassMode(rp, config.orbit.serverpos) end
             end
             return
         end
 
+        if not config.state.reloading and not config.state.outofammo and not checksling and not config.voidspam.enabled and rageActive() and config.target.enabled and config.target.character then
+            local randomX = math.random(-10000, 10000)
+            local randomZ = math.random(-10000, 10000)
+            config.orbit.serverpos = Vector3.new(randomX, -99999999999, randomZ)
+            local rp = localfighter and localfighter.Entity and localfighter.Entity.RootPart
+            if rp then applyBypassMode(rp, config.orbit.serverpos) end
+            return
+        end
+
         local targetpos = orbBase(root)
-        config.orbit.angle = config.orbit.angle + (config.orbit.speed * dt)
+        config.orbit.angle = config.orbit.angle + (config.orbit.orbitSpeed * dt)
         local offset = Vector3.new(
             math.cos(config.orbit.angle) * config.orbit.radius,
             config.orbit.height,
@@ -12176,12 +7822,13 @@ local function startsync()
         config.orbit.serverpos = targetpos + offset
 
         if not getgenv().InstanceUndergroundEnabled then
-            if localfighter and localfighter.Entity and localfighter.Entity.RootPart then
-                local currentPos = localfighter.Entity.RootPart.CFrame
+            local rp = localfighter and localfighter.Entity and localfighter.Entity.RootPart
+            if rp then
+                local currentPos = rp.CFrame
                 local newPos = CFrame.new(config.orbit.serverpos)
                 local distance = (newPos.Position - currentPos.Position).Magnitude
                 if distance < 2000 then
-                    localfighter.Entity.RootPart.CFrame = newPos
+                    applyBypassModeCF(rp, newPos)
                     config.orbit.savedpos = currentPos
                 end
             end
@@ -12193,6 +7840,8 @@ local function autoshoot()
     if not isSling(getweapon()) and config.voidspam.enabled and config.voidspam.phase == "hide" then return end
     if not config.target.enabled or not config.target.character or not config.target.autoshoot then return end
     if config.target.immune then return end
+    if not ragePerf.canShoot then return end
+    if ragePerf.shootReadyAt and tick() < ragePerf.shootReadyAt then return end
     if not isSling(getweapon()) and config.voidspam.enabled and config.voidspam.phase == "hide" then return end
     if config.voidspam.enabled and config.voidspam.phase == "hide" then return end
     local weapon = getweapon()
@@ -12203,6 +7852,16 @@ local function autoshoot()
     if not isInfiniteWeapon() then
         if config.state.reloading or config.state.outofammo then return end
         if not canuse() then return end
+    end
+    if config.target.rightClickKnife and weapon == "Knife" then
+        task.spawn(function()
+            local vim = game:GetService("VirtualInputManager")
+            local mousePos = game:GetService("UserInputService"):GetMouseLocation()
+            vim:SendMouseButtonEvent(mousePos.X, mousePos.Y, 1, true, game, 0)
+            task.wait(0.01)
+            vim:SendMouseButtonEvent(mousePos.X, mousePos.Y, 1, false, game, 0)
+        end)
+        return
     end
     local targetChar = config.target.character
     if not valid(targetChar) then return end
@@ -12237,7 +7896,7 @@ local function autoshoot()
     local equipped = lf.EquippedItem
     if equipped and equipped:Get("ObjectID") then
         ragePerf.lastAttackTick = tick()
-        local attempts = math.clamp(math.floor(tonumber(config.target.shootAttempts) or 1), 1, 3)
+        local attempts = math.floor(tonumber(config.target.shootAttempts) or 1)
         for _ = 1, attempts do
             pcall(function()
                 replicatedstorage.Remotes.Replication.Fighter.UseItem:FireServer(
@@ -12259,7 +7918,8 @@ modules.camcontrol.Update = function(...)
     elseif config.state.csyncactive and localfighter and localfighter.Entity and localfighter.Entity.RootPart and oldpos then
         localfighter.Entity.RootPart.CFrame = oldpos
     end
-    return oldcamupdate(...)
+    local results = {oldcamupdate(...)}
+    return unpack(results)
 end
 
 local immuneList = {}
@@ -12314,30 +7974,64 @@ local function cleartarget()
     config.target.enabled = false
     stopsync()
     config.target.character = nil
+    getgenv().InstanceRagebotTarget = nil
     config.target.lastchar = nil
     config.target.lastplayer = nil
     config.target.manualkey = false
     config.target.immune = false
+    if ragePerf.delayTask then task.cancel(ragePerf.delayTask) ragePerf.delayTask = nil end
+    ragePerf.delayActive = false
+    ragePerf.canShoot = false
+    ragePerf.shootReadyAt = nil
+    getgenv()._rageCanShoot = false
+    getgenv()._rageDelayActive = false
     indicator.Color = Color3.fromRGB(255, 50, 50)
+end
+
+local function trackKill(targetPlayer)
+    if not targetPlayer then return end
+    config.kills.count = config.kills.count + 1
+    config.kills.streak = config.kills.streak + 1
+    config.kills.lastKillAt = tick()
 end
 
 local function settarget(char)
     if not char then return end
+    clrVoidSnap()
+    vhState.active = false
     local targetplr = players:GetPlayerFromCharacter(char)
     config.target.enabled = true
     config.target.character = char
+    getgenv().InstanceRagebotTarget = char
     config.target.lastchar = char
     config.target.lastplayer = targetplr
     config.target.immune = false
+    ragePerf.targetAcquiredAt = tick()
+    ragePerf.canShoot = false
+    getgenv()._rageCanShoot = false
+    if ragePerf.delayTask then task.cancel(ragePerf.delayTask) end
+    ragePerf.delayActive = true
+    getgenv()._rageDelayActive = true
     indicator.Color = Color3.fromRGB(255, 50, 50)
     local root = char:FindFirstChild("HumanoidRootPart")
-    if root and root:FindFirstChild("Attachment") then
+    local isImmune = root and root:FindFirstChild("Attachment")
+    if isImmune then
         config.target.immune = true
         indicator.Color = Color3.fromRGB(180, 0, 255)
-    else
-        eqSlot()
-        startsync()
     end
+    ragePerf.delayTask = task.spawn(function()
+        task.wait(ragePerf.shootDelay)
+        if not config.target.enabled or config.target.character ~= char then return end
+        ragePerf.delayActive = false
+        getgenv()._rageDelayActive = false
+        if not isImmune then
+            eqSlot()
+            startsync()
+        end
+        ragePerf.shootReadyAt = tick() + ragePerf.shootCooldown
+        ragePerf.canShoot = true
+        getgenv()._rageCanShoot = true
+    end)
 end
 
 local sling = {
@@ -12429,7 +8123,7 @@ local function updatesling()
             sling.enabled = false
             stopslingTP()
         end
-        if not Toggles.AntiAimUnderground.Value then
+        if Toggles.AntiAimUnderground and not Toggles.AntiAimUnderground.Value then
             if getgenv().InstanceSetUnderground then
                 getgenv().InstanceSetUnderground(false)
             end
@@ -12490,10 +8184,16 @@ runsvc.RenderStepped:Connect(function()
 end)
 
 runsvc.Heartbeat:Connect(function()
-    fflag()
-    updatesling()
-    tickAmmo()
+    pcall(fflag)
+    pcall(updatesling)
+    pcall(tickAmmo)
     if config.target.auto and not config.target.manualkey then
+        local myChar = player.Character
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if config.target.safeHP > 0 and myHum and myHum.Health < config.target.safeHP then
+            if config.target.enabled then cleartarget() end
+            return
+        end
         local current, _, melee = getammo()
         local hasammo = current == nil or current > 0 or melee
         if hasammo and not config.state.reloading then
@@ -12502,16 +8202,31 @@ runsvc.Heartbeat:Connect(function()
                 if newtarget then
                     if config.target.enabled then stopsync() end
                     settarget(newtarget)
+                else
+                    -- no target, no action
                 end
             end
         end
     end
     if config.target.enabled and config.target.character then
         if not valid(config.target.character) then
+            if config.target.lastplayer then
+                trackKill(config.target.lastplayer)
+            end
+            if config.target.autoSwitch then
+                local newtarget = nearest()
+                if newtarget then
+                    cleartarget()
+                    settarget(newtarget)
+                    return
+                end
+            end
             cleartarget()
             return
         end
-        eqSlot()
+        if not ragePerf.delayActive then
+            eqSlot()
+        end
         if config.target.autoshoot and not config.target.immune then
             autoshoot()
         end
@@ -12522,7 +8237,6 @@ ragebot.config = config
 ragebot.nearest = nearest
 ragebot.settarget = settarget
 ragebot.cleartarget = cleartarget
-ragebot.stopvoid = stopvoid
 ragebot.vhState = vhState
 ragebot.ragePerf = ragePerf
 ragebot.getammo = getammo
@@ -12544,7 +8258,7 @@ local camera = workspace.CurrentCamera
 
 local function mkStatusLbl()
     local label = getgenv().InstanceTrackDrawingText(Drawing.new("Text"))
-    label.Size = 13
+    label.Size = config.ragestatus.textSize or 13
     label.Font = 2
     label.Outline = true
     label.Center = true
@@ -12560,7 +8274,7 @@ local rageStatusLine1 = mkStatusLbl()
 local rageStatusLine2 = mkStatusLbl()
 
 local function styleStatusLbl(label)
-    label.Size = 13
+    label.Size = config.ragestatus.textSize or 13
     label.Font = 2
     label.Outline = true
     label.Color = config.ragestatus.color
@@ -12637,7 +8351,7 @@ local function isKilling()
     if config.voidspam.enabled and config.voidspam.phase == "shoot" and isSling(getweapon()) then
         return true
     end
-    if tick() - (ragePerf.lastAttackTick or 0) < 0.45 then
+    if tick() - (ragePerf.lastAttackTick or 0) < math.max(ragePerf.shootCooldown, 0.05) then
         return true
     end
     return false
@@ -12675,6 +8389,13 @@ local function vsDetail()
     )
 end
 
+local function getEnemyHealth()
+    if not config.target.character then return "?" end
+    local hum = config.target.character:FindFirstChildOfClass("Humanoid")
+    if not hum then return "?" end
+    return string.format("%.0f", hum.Health)
+end
+
 local function rageLines()
     local now = tick()
     if isKilling() then
@@ -12685,32 +8406,19 @@ local function rageLines()
         ragePerf.killStartAt = nil
     end
     if config.state.reloading then
-        return "ragebot: void hide", "reloading"
+        return "ragebot: reloading..."
     end
     if inVoid() then
-        local det = vsDetail()
-        return "ragebot: void hide", det ~= "" and det or ""
+        return "ragebot: void"
     end
     if isKilling() then
         local name = killNm()
-        local elapsed = now - (ragePerf.killStartAt or now)
-        local hum = config.target.character and config.target.character:FindFirstChildOfClass("Humanoid")
-        local main = string.format("ragebot : attacking (%s) · %.1fs", name, elapsed)
-        local detailParts = {}
-        local hpBit = hum and string.format("%.0f hp", hum.Health) or "hp ?"
-        detailParts[#detailParts + 1] = hpBit
-        local voidDetail = vsDetail()
-        if voidDetail ~= "" then
-            detailParts[#detailParts + 1] = voidDetail
-        end
-        return main, table.concat(detailParts, " · ")
+        return string.format("ragebot: killing %s...", name)
     end
     if rageActive() and config.target.enabled and config.target.character then
-        local hum = config.target.character:FindFirstChildOfClass("Humanoid")
-        local hpBit = hum and string.format("%.0f hp", hum.Health) or "locked"
-        return "ragebot: ready", hpBit
+        return "ragebot: waiting..."
     end
-    return "ragebot: idle", ""
+    return "ragebot: idle"
 end
 
 local function drawStatus()
@@ -12721,21 +8429,18 @@ local function drawStatus()
     end
     local anchor = statusAnchor()
     local gap = config.ragestatus.lineGap or 14
-    local showAmmo = config.ragestatus.showAmmo ~= false
     if ragePerf.lastRageColor ~= config.ragestatus.color then
         ragePerf.lastRageColor = config.ragestatus.color
         styleStatusLbl(rageStatusLine1)
         styleStatusLbl(rageStatusLine2)
     end
-    local mainLine, detailLine = rageLines()
-    local ammoLine = showAmmo and hudAmmo() or ""
-    local line2Text = detailLine
-    if line2Text ~= "" and ammoLine ~= "" then
-        line2Text = line2Text .. " · " .. ammoLine
-    elseif line2Text == "" then
-        line2Text = ammoLine
-    end
-    local lineCount = 1 + (line2Text ~= "" and 1 or 0)
+    local mainLine = rageLines()
+    local cur, maxAmmo = getammo()
+    local ammoStr = cur ~= nil and string.format("%d/%d", math.floor(cur), math.max(math.floor(maxAmmo or 0), 0)) or "?/?"
+    local hp = getEnemyHealth()
+    local killStr = config.ragestatus.showKills and string.format(" [%d]", config.kills.count) or ""
+    local line2Text = string.format("%s/%s%s", ammoStr, hp, killStr)
+    local lineCount = 2
     local topOffset = -(lineCount - 1) * (gap / 2)
     if mainLine ~= ragePerf.lastRageStatusText then
         ragePerf.lastRageStatusText = mainLine
@@ -12744,17 +8449,12 @@ local function drawStatus()
     rageStatusLine1.Position = anchor + Vector2.new(0, topOffset)
     rageStatusLine1.Visible = config.ragestatus.enabled
     local nextY = topOffset + gap
-    if line2Text ~= "" then
-        if line2Text ~= ragePerf.lastRageDetailText then
-            ragePerf.lastRageDetailText = line2Text
-            rageStatusLine2.Text = line2Text
-        end
-        rageStatusLine2.Position = anchor + Vector2.new(0, nextY)
-        rageStatusLine2.Visible = config.ragestatus.enabled
-    else
-        ragePerf.lastRageDetailText = ""
-        rageStatusLine2.Visible = false
+    if line2Text ~= ragePerf.lastRageDetailText then
+        ragePerf.lastRageDetailText = line2Text
+        rageStatusLine2.Text = line2Text
     end
+    rageStatusLine2.Position = anchor + Vector2.new(0, nextY)
+    rageStatusLine2.Visible = config.ragestatus.enabled
 end
 
 ragebot.drawStatus = drawStatus
@@ -12771,7 +8471,6 @@ local config = ragebot.config
 local nearest = ragebot.nearest
 local settarget = ragebot.settarget
 local cleartarget = ragebot.cleartarget
-local stopvoid = ragebot.stopvoid
 
 local function togglekey()
     if config.target.auto then return end
@@ -12787,12 +8486,11 @@ local function togglekey()
 end
 
 local rageui = {
-    targetgroup = Tabs.Combat:AddRightTabbox()
+    ragebotBox = Tabs.Combat:AddRightGroupbox('ragebot'),
+    ragebotvisualBox = Tabs.Combat:AddRightGroupbox('ragebot visualizer'),
 }
-rageui.ragebottab = rageui.targetgroup:AddTab('ragebot')
-rageui.ragebotvisualtab = rageui.targetgroup:AddTab('visualizer')
 
-rageui.ragebottab:AddToggle("TargetOn", {
+rageui.ragebotBox:AddToggle("TargetOn", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -12815,14 +8513,50 @@ rageui.ragebottab:AddToggle("TargetOn", {
     Callback = function() togglekey() end
 })
 
-rageui.ragebottab:AddToggle("AutoTarget", {
+rageui.ragebotBox:AddToggle("AutoTarget", {
     Text = "auto target",
     Default = false,
     Callback = function(val) config.target.auto = val end
 })
 
+rageui.ragebotBox:AddToggle("RightClickKnife", {
+    Text = "right click knife",
+    Default = false,
+    Callback = function(val) config.target.rightClickKnife = val end
+})
+
+rageui.ragebotBox:AddSlider("TargetDelay", {
+    Text = "target delay change",
+    Default = 0.3,
+    Min = 0,
+    Max = 2.5,
+    Rounding = 2,
+    Suffix = "s",
+    Callback = function(val)
+        ragePerf.shootDelay = val
+        if ragePerf.delayActive then
+            if ragePerf.delayTask then task.cancel(ragePerf.delayTask) end
+            ragePerf.delayTask = task.delay(val, function() ragePerf.delayActive = false getgenv()._rageDelayActive = false end)
+        end
+    end
+})
+
+rageui.ragebotBox:AddSlider("ShootCooldown", {
+    Text = "delay shoot",
+    Default = 0,
+    Min = 0,
+    Max = 2.5,
+    Rounding = 2,
+    Suffix = "s",
+    Callback = function(val)
+        ragePerf.shootCooldown = val
+    end
+})
+
 local attackUnderVisGate = { Type = "Toggle", Value = false }
 local attackCustomVisGate = { Type = "Toggle", Value = false }
+local attackUnderDep
+local attackCustomDep
 
 local function syncAtkDeps()
     local mode = config.target.attackPosition or "default"
@@ -12837,7 +8571,7 @@ local function syncAtkDeps()
     end
 end
 
-local attackPosDropdown = rageui.ragebottab:AddDropdown("AutoTargetAttackPos", {
+local attackPosDropdown = rageui.ragebotBox:AddDropdown("AutoTargetAttackPos", {
     Text = "attack position",
     Default = "default",
     Values = { "default", "under" },
@@ -12850,7 +8584,7 @@ local attackPosDropdown = rageui.ragebottab:AddDropdown("AutoTargetAttackPos", {
     end,
 })
 
-rageui.ragebottab:AddToggle("AttackCustomOverride", {
+rageui.ragebotBox:AddToggle("AttackCustomOverride", {
     Text = "attack position",
     Default = false,
     Tooltip = "overrides attack position dropdown when enabled",
@@ -12863,7 +8597,7 @@ rageui.ragebottab:AddToggle("AttackCustomOverride", {
     end,
 })
 
-local attackUnderDep = rageui.ragebottab:AddDependencyBox()
+attackUnderDep = rageui.ragebotBox:AddDependencyBox()
 
 attackUnderDep:AddSlider("UnderAttackOffset", {
     Text = "under offset",
@@ -12887,7 +8621,7 @@ attackUnderDep:SetupDependencies({
     { attackUnderVisGate, true },
 })
 
-local attackCustomDep = rageui.ragebottab:AddDependencyBox()
+attackCustomDep = rageui.ragebotBox:AddDependencyBox()
 
 local function onAtkCustom()
     if config.target.attackCustomEnabled and config.state.csyncactive and ragebot.refreshAtk then
@@ -12967,7 +8701,7 @@ attackCustomDep:SetupDependencies({
 syncAtkDeps()
 task.defer(syncAtkDeps)
 
-rageui.ragebottab:AddDropdown("RageWeaponPick", {
+rageui.ragebotBox:AddDropdown("RageWeaponPick", {
     Text = "weapon",
     Default = config.target.weaponPick or "primary",
     Values = { "primary", "secondary", "melee" },
@@ -12982,32 +8716,79 @@ rageui.ragebottab:AddDropdown("RageWeaponPick", {
     end,
 })
 
-rageui.ragebottab:AddSlider("ShootAttempts", {
+rageui.ragebotBox:AddSlider("ShootAttempts", {
     Text = "shoot attempts",
     Default = 1,
     Min = 1,
-    Max = 3,
+    Max = 20,
     Rounding = 0,
     Suffix = "x",
     Callback = function(val)
-        config.target.shootAttempts = math.clamp(math.floor(tonumber(val) or 1), 1, 3)
+        config.target.shootAttempts = math.floor(tonumber(val) or 1)
     end,
 })
 
-rageui.ragebottab:AddDropdown("TargetPart", {
+rageui.ragebotBox:AddDropdown("TargetPart", {
     Text = "hit part",
     Default = "Head",
     Values = {"Head", "HumanoidRootPart", "Torso", "UpperTorso", "Closest", "Random"},
     Callback = function(val) config.target.hitpart = val end
 })
 
-rageui.ragebottab:AddToggle("PredictT", {
+rageui.ragebotBox:AddDropdown("TargetSort", {
+    Text = "target sort",
+    Default = "nearest",
+    Values = {"nearest", "farthest", "lowest hp", "highest hp", "closest to cursor", "random"},
+    Callback = function(val) config.target.targetSort = val end
+})
+
+rageui.ragebotBox:AddToggle("TeamCheck", {
+    Text = "team check",
+    Default = true,
+    Callback = function(val) config.target.teamCheck = val end
+})
+
+rageui.ragebotBox:AddToggle("WallCheck", {
+    Text = "wall check",
+    Default = false,
+    Callback = function(val) config.target.wallCheck = val end
+})
+
+rageui.ragebotBox:AddSlider("MaxDistance", {
+    Text = "max distance",
+    Default = 0,
+    Min = 0,
+    Max = 5000,
+    Rounding = 0,
+    Suffix = " studs",
+    Compact = true,
+    Callback = function(val) config.target.maxDistance = val end
+})
+
+rageui.ragebotBox:AddSlider("SafeHP", {
+    Text = "safe hp",
+    Default = 0,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = " hp",
+    Compact = true,
+    Callback = function(val) config.target.safeHP = val end
+})
+
+rageui.ragebotBox:AddToggle("AutoSwitch", {
+    Text = "auto switch target",
+    Default = true,
+    Callback = function(val) config.target.autoSwitch = val end
+})
+
+rageui.ragebotBox:AddToggle("PredictT", {
     Text = "prediction",
     Default = false,
     Callback = function(val) config.prediction.enabled = val end
 })
 
-rageui.ragebottab:AddSlider("PredictMul", {
+rageui.ragebotBox:AddSlider("PredictMul", {
     Text = "prediction mult",
     Default = 1.2,
     Min = 0.1,
@@ -13016,7 +8797,7 @@ rageui.ragebottab:AddSlider("PredictMul", {
     Callback = function(val) config.prediction.multiplier = val end
 })
 
-rageui.ragebottab:AddToggle("VoidSpam", {
+rageui.ragebotBox:AddToggle("VoidSpam", {
     Text = "voidspam",
     Default = false,
     Callback = function(val)
@@ -13042,7 +8823,7 @@ rageui.ragebottab:AddToggle("VoidSpam", {
     end
 })
 
-rageui.ragebottab:AddDualSlider('VoidShootTime', 'VoidHideTime', {
+rageui.ragebotBox:AddSlider('VoidShootTime', {
     Default = 1,
     Text = "attack",
     Min = 0.1,
@@ -13054,7 +8835,8 @@ rageui.ragebottab:AddDualSlider('VoidShootTime', 'VoidHideTime', {
         config.voidspam.shoot_min = val
         config.voidspam.shoot_max = val
     end
-}, {
+})
+rageui.ragebotBox:AddSlider('VoidHideTime', {
     Default = 1,
     Text = "hide",
     Min = 0.1,
@@ -13068,7 +8850,133 @@ rageui.ragebottab:AddDualSlider('VoidShootTime', 'VoidHideTime', {
     end
 })
 
-local rageStatusToggle = rageui.ragebotvisualtab:AddToggle("RageStatus", {
+rageui.ragebotBox:AddDropdown("VoidBypassMode", {
+    Text = "void bypass",
+    Default = "Extreme Networking",
+    Values = {"None","Velocity","CFrame only","Hybrid","Physics Bypass","Extreme Networking"},
+    Callback = function(val) config.voidspam.bypassMode = val end
+})
+
+rageui.ragebotBox:AddSlider("OrbitSpeed", {
+    Text = "orbit speed",
+    Default = 9000,
+    Min = 100,
+    Max = 50000,
+    Rounding = 0,
+    Compact = true,
+    Callback = function(val)
+        config.orbit.orbitSpeed = val
+        config.orbit.speed = val
+    end
+})
+
+rageui.ragebotBox:AddToggle("ShowKills", {
+    Text = "show kills",
+    Default = true,
+    Callback = function(val) config.ragestatus.showKills = val end
+})
+
+rageui.ragebotBox:AddToggle("ResetKills", {
+    Text = "reset kill counter",
+    Default = false,
+    Callback = function(val)
+        if val then
+            config.kills.count = 0
+            config.kills.streak = 0
+        end
+    end
+})
+
+do
+local backstabPlayers = cloneref(game:GetService("Players"))
+local backstabPlayer = backstabPlayers.LocalPlayer
+local backstabOriginalFuncs = {}
+
+local function startBackstab()
+    config.backstab.enabled = true
+
+    pcall(function()
+        local knife = require(backstabPlayer.PlayerScripts.Modules.ItemTypes.Knife)
+            or require(backstabPlayer.PlayerScripts.Modules.ItemTypes.Melee)
+        if knife then
+            for _, fname in ipairs({"IsBackstab", "CheckBackstab", "GetHitType", "CanBackstab"}) do
+                if rawget(knife, fname) and type(knife[fname]) == "function" then
+                    local old = knife[fname]
+                    backstabOriginalFuncs[fname] = old
+                    knife[fname] = function(...)
+                        if config.backstab.enabled then return true end
+                        return old(...)
+                    end
+                    break
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        for _, v in ipairs(getgc(true)) do
+            if type(v) == "table" then
+                if rawget(v, "StartShooting") and rawget(v, "IsKnife") then
+                    local old = v.StartShooting
+                    backstabOriginalFuncs[v] = old
+                    v.StartShooting = function(self2, ...)
+                        local results = {old(self2, ...)}
+                        if results[3] and type(results[3]) == "table" then
+                            results[3].IsBackstab = true
+                            results[3].Backstab = true
+                        end
+                        return unpack(results)
+                    end
+                end
+            end
+        end
+    end)
+
+end
+
+local function stopBackstab()
+    config.backstab.enabled = false
+    for fname, oldFunc in pairs(backstabOriginalFuncs) do
+        pcall(function()
+            local knife = require(backstabPlayer.PlayerScripts.Modules.ItemTypes.Knife)
+                or require(backstabPlayer.PlayerScripts.Modules.ItemTypes.Melee)
+            if knife and rawget(knife, fname) then
+                knife[fname] = oldFunc
+            end
+        end)
+    end
+    for tbl, oldFunc in pairs(backstabOriginalFuncs) do
+        if type(tbl) == "table" and rawget(tbl, "StartShooting") then
+            tbl.StartShooting = oldFunc
+        end
+    end
+    backstabOriginalFuncs = {}
+end
+
+rageui.ragebotBox:AddToggle("Backstab", {
+    Text = "always backstab",
+    Default = false,
+    Callback = function(val)
+        config.backstab.enabled = val
+        if getgenv().InstanceConfigLoading then return end
+        if val then
+            startBackstab()
+        else
+            stopBackstab()
+        end
+    end,
+})
+
+rageui.ragebotBox:AddToggle("BackstabCamera", {
+    Text = "backstab cam",
+    Default = false,
+    Callback = function(val)
+        config.backstab.camera = val
+    end,
+})
+end
+
+local rageStatusToggle = rageui.ragebotvisualBox:AddToggle("RageStatus", {
     Text = "rage status",
     Default = config.ragestatus.enabled,
     Callback = function(val)
@@ -13094,7 +9002,7 @@ local rageStatusToggle = rageui.ragebotvisualtab:AddToggle("RageStatus", {
     end,
 })
 
-local rageStatusDep = rageui.ragebotvisualtab:AddDependencyBox()
+local rageStatusDep = rageui.ragebotvisualBox:AddDependencyBox()
 rageStatusDep:SetupDependencies({
     { rageStatusToggle, true },
 })
@@ -13148,13 +9056,38 @@ rageStatusDep:AddToggle("RageStatusReloadHide", {
     end,
 })
 
-rageui.ragebotvisualtab:AddToggle("VisEnabled", {
+rageStatusDep:AddSlider("RageStatusTextSize", {
+    Text = "text size",
+    Default = 15,
+    Min = 10,
+    Max = 30,
+    Rounding = 0,
+    Compact = true,
+    Callback = function(val)
+        config.ragestatus.textSize = val
+        ragePerf.lastRageColor = nil
+    end,
+})
+
+rageStatusDep:AddSlider("RageStatusLineGap", {
+    Text = "line gap",
+    Default = 15,
+    Min = 5,
+    Max = 40,
+    Rounding = 0,
+    Compact = true,
+    Callback = function(val)
+        config.ragestatus.lineGap = val
+    end,
+})
+
+rageui.ragebotvisualBox:AddToggle("VisEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val) config.visualizer.enabled = val end
 })
 
-rageui.ragebotvisualtab:AddToggle("VisTracerEnabled", {
+rageui.ragebotvisualBox:AddToggle("VisTracerEnabled", {
     Text = "tracer",
     Default = false,
     Callback = function(val) config.visualizer.tracer.enabled = val end
@@ -13163,20 +9096,20 @@ rageui.ragebotvisualtab:AddToggle("VisTracerEnabled", {
     Callback = function(val) config.visualizer.tracer.color = val end
 })
 
-rageui.ragebotvisualtab:AddDropdown("VisTracerStart", {
+rageui.ragebotvisualBox:AddDropdown("VisTracerStart", {
     Text = "tracer start",
     Default = "cursor",
     Values = {"cursor", "muzzle"},
     Callback = function(val) config.visualizer.tracer.start_point = val end
 })
 
-rageui.ragebotvisualtab:AddToggle("VisTracerOutline", {
+rageui.ragebotvisualBox:AddToggle("VisTracerOutline", {
     Text = "tracer outline",
     Default = true,
     Callback = function(val) config.visualizer.tracer.outline = val end
 })
 
-rageui.ragebotvisualtab:AddSlider("VisTracerThickness", {
+rageui.ragebotvisualBox:AddSlider("VisTracerThickness", {
     Text = "tracer thickness",
     Default = 1,
     Min = 0.1,
@@ -13441,6 +9374,12 @@ local function pushHitNotification(targetName, dmg, bodyPart)
     end
 
     local hn = config.hitNotifications
+    if hn.uiNotif then
+        local msg = formatHitNotifLine(targetName, dmg, bodyPart)
+        pcall(function() Library:Notify(msg, hn.duration or 3) end)
+        return
+    end
+
     local now = tick()
     applyHitNotifRootPosition()
     hitNotifRoot.Visible = true
@@ -13466,7 +9405,7 @@ local function pushHitNotification(targetName, dmg, bodyPart)
     end
 end
 
-local function getPlayerFromHitPart(hitPart)
+getPlayerFromHitPart = function(hitPart)
     if not hitPart then
         return nil, nil, nil
     end
@@ -13638,7 +9577,7 @@ local function recordLocalHitTarget(plr, hum, bodyPart)
     }
 end
 
-local function notifyProjectileImpact(hitPart)
+notifyProjectileImpact = function(hitPart)
     if not hitPart then
         return
     end
@@ -13882,7 +9821,7 @@ end
 
 local frame = Tabs.Character:AddRightGroupbox('profile')
 
-if not config then config = {} end
+local config = config or {}
 if not config.profile then
     config.profile = {
         level = { enabled = false, value = 9999 },
@@ -13956,9 +9895,8 @@ task.spawn(function()
     end
 end)
 
-local FrameScriptsufhner = Tabs.Character:AddLeftTabbox()
-local nnTab = FrameScriptsufhner:AddTab("name")
-local skinTab = FrameScriptsufhner:AddTab("skin")
+local nnBox = Tabs.Character:AddLeftGroupbox('name')
+local skinBox = Tabs.Character:AddLeftGroupbox('skin')
 
 local p = game:GetService("Players").LocalPlayer
 
@@ -14062,7 +10000,7 @@ local function applyskin(c)
     end)
 end
 
-nnTab:AddToggle("NameSpoofEnabled", {
+nnBox:AddToggle("NameSpoofEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14074,7 +10012,7 @@ nnTab:AddToggle("NameSpoofEnabled", {
     end
 })
 
-nnTab:AddToggle("NameSpoofVerified", {
+nnBox:AddToggle("NameSpoofVerified", {
     Text = "verified",
     Default = false,
     Callback = function(val)
@@ -14086,7 +10024,7 @@ nnTab:AddToggle("NameSpoofVerified", {
     end
 })
 
-nnTab:AddToggle("NameSpoofPremium", {
+nnBox:AddToggle("NameSpoofPremium", {
     Text = "premium",
     Default = false,
     Callback = function(val)
@@ -14098,7 +10036,7 @@ nnTab:AddToggle("NameSpoofPremium", {
     end
 })
 
-nnTab:AddInput("NameSpoofValue", {
+nnBox:AddInput("NameSpoofValue", {
     Text = "custom name",
     Default = "hi",
     Numeric = false,
@@ -14113,7 +10051,7 @@ nnTab:AddInput("NameSpoofValue", {
     end
 })
 
-skinTab:AddToggle("SkinChangerEnabled", {
+skinBox:AddToggle("SkinChangerEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14124,7 +10062,7 @@ skinTab:AddToggle("SkinChangerEnabled", {
     end
 })
 
-skinTab:AddInput("SkinChangerValue", {
+skinBox:AddInput("SkinChangerValue", {
     Text = "user id",
     Default = "1",
     Numeric = true,
@@ -14174,10 +10112,9 @@ pcall(function()
     game:GetService("CoreGui").DescendantAdded:Connect(handlenewdescendant)
 end)
 
-local FrameScriptStats = Tabs.Character:AddLeftTabbox()
-local fpsTab = FrameScriptStats:AddTab("fps")
-local msTab = FrameScriptStats:AddTab("ms")
-local regionTab = FrameScriptStats:AddTab("region")
+local fpsBox = Tabs.Character:AddLeftGroupbox('fps')
+local msBox = Tabs.Character:AddLeftGroupbox('ms')
+local regionBox = Tabs.Character:AddLeftGroupbox('region')
 
 if not config.profile.fpsspoof then
     config.profile.fpsspoof = { enabled = false, value = "1", fraud = false }
@@ -14188,7 +10125,7 @@ if not config.profile.msspoof then
 end
 
 if not config.profile.regionspoof then
-    config.profile.regionspoof = { enabled = false, value = ".gg/getinstance" }
+    config.profile.regionspoof = { enabled = false, value = ".gg/getOYNX" }
 end
 
 _G.FPSSpoofConnections = _G.FPSSpoofConnections or {}
@@ -14428,7 +10365,7 @@ local function applyRegionSpoof()
     end
 end
 
-fpsTab:AddToggle("FPSSpoofEnabled", {
+fpsBox:AddToggle("FPSSpoofEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14437,7 +10374,7 @@ fpsTab:AddToggle("FPSSpoofEnabled", {
     end
 })
 
-fpsTab:AddToggle("FPSSpoofFraud", {
+fpsBox:AddToggle("FPSSpoofFraud", {
     Text = "fraud",
     Default = false,
     Callback = function(val)
@@ -14448,7 +10385,7 @@ fpsTab:AddToggle("FPSSpoofFraud", {
     end
 })
 
-fpsTab:AddInput("FPSSpoofValue", {
+fpsBox:AddInput("FPSSpoofValue", {
     Text = "fps value",
     Default = "1",
     Numeric = true,
@@ -14462,7 +10399,7 @@ fpsTab:AddInput("FPSSpoofValue", {
     end
 })
 
-msTab:AddToggle("MSSpoofEnabled", {
+msBox:AddToggle("MSSpoofEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14471,7 +10408,7 @@ msTab:AddToggle("MSSpoofEnabled", {
     end
 })
 
-msTab:AddToggle("MSSpoofFraud", {
+msBox:AddToggle("MSSpoofFraud", {
     Text = "fraud",
     Default = false,
     Callback = function(val)
@@ -14482,7 +10419,7 @@ msTab:AddToggle("MSSpoofFraud", {
     end
 })
 
-msTab:AddInput("MSSpoofValue", {
+msBox:AddInput("MSSpoofValue", {
     Text = "ms value",
     Default = "1",
     Numeric = true,
@@ -14496,7 +10433,7 @@ msTab:AddInput("MSSpoofValue", {
     end
 })
 
-regionTab:AddToggle("RegionSpoofEnabled", {
+regionBox:AddToggle("RegionSpoofEnabled", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14505,14 +10442,14 @@ regionTab:AddToggle("RegionSpoofEnabled", {
     end
 })
 
-regionTab:AddInput("RegionSpoofValue", {
+regionBox:AddInput("RegionSpoofValue", {
     Text = "region value",
-    Default = ".gg/getinstance",
+    Default = ".gg/getOYNX",
     Numeric = false,
     Finished = false,
     Placeholder = "type region...",
     Callback = function(val)
-        config.profile.regionspoof.value = val or ".gg/getinstance"
+        config.profile.regionspoof.value = val or ".gg/getOYNX"
         if config.profile.regionspoof.enabled then
             applyRegionSpoof()
         end
@@ -14549,16 +10486,8 @@ v2:AddToggle("cframespf_enabled", {
     Default = false,
     Callback = function(state)
         _G.cframeactive = state
+        _G.keyheldcframe = state
         if getgenv().InstanceConfigLoading then return end
-    end
-}):AddKeyPicker("cframespf_key", {
-    Default = "None",
-    NoUI = true,
-    SyncToggleState = false,
-    Mode = "Toggle",
-    Text = "Velocity Walkspeed",
-    Callback = function(state)
-        _G.keyheldcframe = state == true
     end
 })
 
@@ -14594,26 +10523,10 @@ v2:AddToggle("cframefly_enabled", {
     Default = false,
     Callback = function(state)
         _G.cframeflyactive = state
+        _G.keyheldcframefly = state
         if getgenv().InstanceConfigLoading then
             return
         end
-        if not state then
-            cleanupfly()
-            local char = LP.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            end
-        end
-    end
-}):AddKeyPicker("cframefly_key", {
-    Default = "None",
-    NoUI = true,
-    SyncToggleState = false,
-    Mode = "Toggle",
-    Text = "Velocity Fly",
-    Callback = function(state)
-        _G.keyheldcframefly = state
         if not state then
             cleanupfly()
             local char = LP.Character
@@ -14646,23 +10559,7 @@ RS.Heartbeat:Connect(function(dt)
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
 
-    if not flybp then
-        flybp = Instance.new("BodyPosition")
-        flybp.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        flybp.D = 1000
-        flybp.P = 10000
-        flybp.Position = hrp.Position
-        flybp.Parent = hrp
-    end
-
-    if not flybg then
-        flybg = Instance.new("BodyGyro")
-        flybg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-        flybg.D = 400
-        flybg.P = 10000
-        flybg.CFrame = hrp.CFrame
-        flybg.Parent = hrp
-    end
+    cleanupfly()
 
     local cam = workspace.CurrentCamera
     local look = cam.CFrame.LookVector
@@ -14680,10 +10577,9 @@ RS.Heartbeat:Connect(function(dt)
         move = move.Unit
     end
 
-    flybp.Position = hrp.Position + (move * _G.cframeflyvalue * dt * 10)
-    flybp.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-
-    flybg.CFrame = CFrame.new(hrp.Position, hrp.Position + look * Vector3.new(1, 0, 1))
+    local newPos = hrp.Position + (move * _G.cframeflyvalue * dt * 10)
+    local lookTarget = hrp.Position + look * Vector3.new(1, 0, 1)
+    hrp.CFrame = CFrame.new(newPos, lookTarget)
 end)
 
 getgenv().InstanceCleanupMovement = function()
@@ -14700,9 +10596,8 @@ getgenv().InstanceCleanupMovement = function()
     end
 end
 
-local characterSection = Tabs.Character:AddLeftTabbox()
-local slfMtrlTab = characterSection:AddTab("self material")
-local animPlayerTab = characterSection:AddTab("animation player")
+local slfMtrlBox = Tabs.Character:AddLeftGroupbox('self material')
+local animPlayerBox = Tabs.Character:AddLeftGroupbox('animation player')
 
 local SlfMtrl = {
     enabled = false,
@@ -14823,7 +10718,7 @@ if p then
     end)
 end
 
-slfMtrlTab:AddToggle("SlfMtrlEnable", {
+slfMtrlBox:AddToggle("SlfMtrlEnable", {
     Text = "enable",
     Default = false,
     Callback = function(val)
@@ -14849,7 +10744,7 @@ slfMtrlTab:AddToggle("SlfMtrlEnable", {
     end
 })
 
-slfMtrlTab:AddDropdown("SlfMtrlMaterial", {
+slfMtrlBox:AddDropdown("SlfMtrlMaterial", {
     Text = "material",
     Default = SlfMtrl.materialName,
     Values = SlfMtrlMaterials,
@@ -14858,7 +10753,7 @@ slfMtrlTab:AddDropdown("SlfMtrlMaterial", {
     end
 })
 
-slfMtrlTab:AddSlider("SlfMtrlTransparency", {
+slfMtrlBox:AddSlider("SlfMtrlTransparency", {
     Text = "transparency",
     Default = SlfMtrl.transparency,
     Min = 0,
@@ -14869,7 +10764,7 @@ slfMtrlTab:AddSlider("SlfMtrlTransparency", {
     end
 })
 
-slfMtrlTab:AddSlider("SlfMtrlPulseSpeed", {
+slfMtrlBox:AddSlider("SlfMtrlPulseSpeed", {
     Text = "pulse speed",
     Default = SlfMtrl.pulseSpeed,
     Min = 0.1,
@@ -14991,6 +10886,10 @@ local settings = {
     microjitter = false,
     microstrength = 25,
     velocitybreaker = false,
+    camerarandomize = 0,
+    camerarandomizeenabled = false,
+    cameraspin = false,
+    cameraspinspeed = 50,
 }
 
 local statemanager = {
@@ -15233,6 +11132,21 @@ local function updantiaim(deltatime)
     
     local rotationcframe = CFrame.Angles(calculatedpitch, calculatedyaw, calculatedroll)
     rootpart.CFrame = rootpart.CFrame * rotationcframe
+
+    if settings.camerarandomizeenabled and settings.camerarandomize > 0 and camRemote then
+        local strength = settings.camerarandomize / 100
+        local iterations = math.max(1, math.floor(settings.camerarandomize))
+        for _ = 1, iterations do
+            local randX = utils.getrandominrange(-180 * strength, 180 * strength)
+            local randY = utils.getrandominrange(-89 * strength, 89 * strength)
+            pcall(function()
+                local encoded = encodeCameraRotation(Vector2.new(randX, randY))
+                if encoded then
+                    camRemote:FireServer(encoded, nil)
+                end
+            end)
+        end
+    end
 end
 
 local function flushAntiAimMovementState()
@@ -15298,6 +11212,19 @@ getgenv().InstanceSyncAfterConfigLoad = function()
         settings.angletype = Options.AntiAimAngle.Value or "none"
     end
 
+    if Toggles and Toggles.cameraRandomizeToggle then
+        settings.camerarandomizeenabled = Toggles.cameraRandomizeToggle.Value == true
+    end
+    if Options and Options.camerarandomize then
+        settings.camerarandomize = Options.camerarandomize.Value or 0
+    end
+    if Toggles and Toggles.cameraSpinToggle then
+        settings.cameraspin = Toggles.cameraSpinToggle.Value == true
+    end
+    if Options and Options.cameraSpinSpeed then
+        settings.cameraspinspeed = Options.cameraSpinSpeed.Value or 50
+    end
+
     if not settings.enabled or (settings.yawtype == "none" and settings.pitchtype == "none" and settings.angletype == "none") then
         flushAntiAimMovementState()
         underground_oldpos = nil
@@ -15361,7 +11288,7 @@ antiaimbox:AddSlider("AntiAimCustomAngle", {
     end
 })
 
-antiaimbox:AddDualSlider('speedslider', 'angleslider', {
+antiaimbox:AddSlider('speedslider', {
     Text = 'min speed',
     Default = 10,
     Min = 1,
@@ -15371,7 +11298,8 @@ antiaimbox:AddDualSlider('speedslider', 'angleslider', {
     Callback = function(value)
         settings.minspeed = value
     end
-}, {
+})
+antiaimbox:AddSlider('angleslider', {
     Text = 'max speed',
     Default = 20,
     Min = 1,
@@ -15383,7 +11311,7 @@ antiaimbox:AddDualSlider('speedslider', 'angleslider', {
     end
 })
 
-antiaimbox:AddDualSlider('minangleslider', 'maxangleslider', {
+antiaimbox:AddSlider('minangleslider', {
     Text = 'min angle',
     Default = 30,
     Min = 1,
@@ -15393,7 +11321,8 @@ antiaimbox:AddDualSlider('minangleslider', 'maxangleslider', {
     Callback = function(value)
         settings.minangle = value
     end
-}, {
+})
+antiaimbox:AddSlider('maxangleslider', {
     Text = 'max angle',
     Default = 60,
     Min = 1,
@@ -15410,6 +11339,46 @@ antiaimbox:AddToggle("randomangle", {
     Default = false,
     Callback = function(value)
         settings.randomangle = value
+    end
+})
+
+antiaimbox:AddSlider('camerarandomize', {
+    Text = 'camera randomize',
+    Default = 0,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = '%',
+    Callback = function(value)
+        settings.camerarandomize = value
+    end
+})
+
+antiaimbox:AddToggle("cameraRandomizeToggle", {
+    Text = "enable camera randomize",
+    Default = false,
+    Callback = function(value)
+        settings.camerarandomizeenabled = value
+    end
+})
+
+antiaimbox:AddToggle("cameraSpinToggle", {
+    Text = "camera spin",
+    Default = false,
+    Callback = function(value)
+        settings.cameraspin = value
+    end
+})
+
+antiaimbox:AddSlider('cameraSpinSpeed', {
+    Text = 'spin speed',
+    Default = 50,
+    Min = 1,
+    Max = 500,
+    Rounding = 0,
+    Suffix = '',
+    Callback = function(value)
+        settings.cameraspinspeed = value
     end
 })
 
@@ -15435,6 +11404,85 @@ getgenv().InstanceSetUnderground = function(val)
 end
 
 runservice.Heartbeat:Connect(updantiaim)
+
+local cameraSpinAngle = 0
+runservice.RenderStepped:Connect(function(dt)
+    if settings.cameraspin and camRemote then
+        local speed = tonumber(settings.cameraspinspeed) or 50
+        cameraSpinAngle = (cameraSpinAngle + speed * dt * 60) % 360
+        local spinVal = cameraSpinAngle <= 180 and cameraSpinAngle or cameraSpinAngle - 360
+        pcall(function()
+            local encoded = encodeCameraRotation(Vector2.new(0, spinVal))
+            if encoded then
+                camRemote:FireServer(encoded, nil)
+            end
+        end)
+    elseif settings.camerarandomizeenabled and settings.camerarandomize > 0 and camRemote then
+        local strength = settings.camerarandomize / 100
+        local iterations = math.max(1, math.floor(settings.camerarandomize))
+        for _ = 1, iterations do
+            local randX = utils.getrandominrange(-180 * strength, 180 * strength)
+            local randY = utils.getrandominrange(-89 * strength, 89 * strength)
+            pcall(function()
+                local encoded = encodeCameraRotation(Vector2.new(randX, randY))
+                if encoded then
+                    camRemote:FireServer(encoded, nil)
+                end
+            end)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if config and config.backstab and config.backstab.camera then
+            local cw = curweap2()
+            if cw == "Knife" then
+                local myChar = LocalPlayer.Character
+                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myRoot then
+                    local closestChar, closestDist = nil, math.huge
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if player ~= LocalPlayer then
+                            local char = player.Character
+                            if char then
+                                local hum = char:FindFirstChildOfClass("Humanoid")
+                                local root = char:FindFirstChild("HumanoidRootPart")
+                                if hum and hum.Health > 0 and root then
+                                    local dist = (root.Position - myRoot.Position).Magnitude
+                                    if dist < closestDist then
+                                        closestDist = dist
+                                        closestChar = char
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if closestChar then
+                        local targetRoot = closestChar:FindFirstChild("HumanoidRootPart")
+                        if targetRoot then
+                            local behindPos = targetRoot.Position - targetRoot.CFrame.LookVector * 3
+                            myRoot.CFrame = CFrame.new(myRoot.Position, Vector3.new(behindPos.X, myRoot.Position.Y, behindPos.Z))
+                            if camRemote then
+                                pcall(function()
+                                    local lookVec = (behindPos - myRoot.Position).Unit
+                                    local yaw = math.deg(math.atan2(-lookVec.X, -lookVec.Z))
+                                    local encoded = encodeCameraRotation(Vector2.new(yaw, 0))
+                                    if encoded then
+                                        camRemote:FireServer(encoded, nil)
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait()
+        else
+            task.wait(0.1)
+        end
+    end
+end)
 
 v3 = Tabs.Misc:AddLeftGroupbox('auto ban - ranked')
 
@@ -15746,6 +11794,7 @@ _G.Features.ModDetector = _G.Features.ModDetector or {
 }
 
 local function updnoclip()
+    if not _G.Features or not _G.Features.Noclip then return end
     if _G.Features.Noclip.Conn then
         _G.Features.Noclip.Conn:Disconnect()
         _G.Features.Noclip.Conn = nil
@@ -15773,7 +11822,7 @@ end
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.2)
-    if _G.Features.Noclip.Enabled then
+    if _G.Features and _G.Features.Noclip and _G.Features.Noclip.Enabled then
         updnoclip()
     end
 end)
@@ -15781,8 +11830,10 @@ end)
 
 v555:AddToggle('noclip', {
     Text = 'noclip',
-    Default = _G.Features.Noclip.Enabled,
+    Default = _G.Features and _G.Features.Noclip and _G.Features.Noclip.Enabled or false,
     Callback = function(Value)
+        if not _G.Features then _G.Features = {} end
+        if not _G.Features.Noclip then _G.Features.Noclip = { Enabled = false, Conn = nil } end
         _G.Features.Noclip.Enabled = Value
         updnoclip()
     end
@@ -15814,9 +11865,11 @@ end
 
 v555:AddToggle('handcaps', {
     Text = 'enable handicaps',
-    Default = _G.Features.Handicaps.Enabled,
+    Default = _G.Features and _G.Features.Handicaps and _G.Features.Handicaps.Enabled or false,
     Callback = function(val)
-        _G.Features.Handicaps.Enabled = val
+        if _G.Features and _G.Features.Handicaps then
+            _G.Features.Handicaps.Enabled = val
+        end
         updHandicaps()
     end
 })
@@ -15956,15 +12009,17 @@ local function moddetector()
         end)
         
         
-        while _G.Features.ModDetector.Enabled and task.wait(15) do
-            if not _G.Features.ModDetector.Enabled then break end
+        while _G.Features and _G.Features.ModDetector and _G.Features.ModDetector.Enabled and task.wait(15) do
+            if not _G.Features or not _G.Features.ModDetector or not _G.Features.ModDetector.Enabled then break end
             if checkAllPlayers() then
                 kickPlayer()
                 break
             end
         end
         
-        _G.Features.ModDetector.Checking = false
+        if _G.Features and _G.Features.ModDetector then
+            _G.Features.ModDetector.Checking = false
+        end
     end)
 end
 
@@ -15978,14 +12033,16 @@ end
 
 v555:AddToggle('moddetector', {
     Text = 'mod detector',
-    Default = _G.Features.ModDetector.Enabled,
+    Default = _G.Features and _G.Features.ModDetector and _G.Features.ModDetector.Enabled or false,
     Callback = function(Value)
-        _G.Features.ModDetector.Enabled = Value
+        if _G.Features and _G.Features.ModDetector then
+            _G.Features.ModDetector.Enabled = Value
+        end
         updmoddetector()
     end
 })
 
-if _G.Features.ModDetector.Enabled then
+if _G.Features and _G.Features.ModDetector and _G.Features.ModDetector.Enabled then
     moddetector()
 end
 
@@ -16145,6 +12202,7 @@ _G.Features.WeaponWireframe = _G.Features.WeaponWireframe or {
 }
 
 local function updnoclip()
+    if not _G.Features or not _G.Features.Noclip then return end
     if _G.Features.Noclip.Conn then
         _G.Features.Noclip.Conn:Disconnect()
         _G.Features.Noclip.Conn = nil
@@ -16172,16 +12230,15 @@ end
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.2)
-    if _G.Features.Noclip.Enabled then
+    if _G.Features and _G.Features.Noclip and _G.Features.Noclip.Enabled then
         updnoclip()
     end
 end)
 end
 
-local hitNotifTab = HitGroup:AddTab('hit notif')
 local rbHitCfg = ragebot.config.hitNotifications
 
-local hitNotificationsToggle = hitNotifTab:AddToggle('HitNotifications', {
+local hitNotificationsToggle = hitNotifBox:AddToggle('HitNotifications', {
     Text = 'hit notifications',
     Default = false,
     Callback = function(val)
@@ -16198,7 +12255,15 @@ local hitNotificationsToggle = hitNotifTab:AddToggle('HitNotifications', {
     end
 })
 
-local hitNotifDepBox = hitNotifTab:AddDependencyBox()
+hitNotifBox:AddToggle('HitNotifUi', {
+    Text = 'ui notif',
+    Default = rbHitCfg.uiNotif,
+    Callback = function(val)
+        rbHitCfg.uiNotif = val
+    end
+})
+
+local hitNotifDepBox = hitNotifBox:AddDependencyBox()
 hitNotifDepBox:AddSlider('HitNotifDuration', {
     Text = 'duration',
     Default = rbHitCfg.duration,
@@ -16341,7 +12406,8 @@ hitNotifDepBox:AddSlider('HitNotifOutSpeed', {
     end
 })
 hitNotifDepBox:SetupDependencies({
-    { hitNotificationsToggle, true }
+    { hitNotificationsToggle, true },
+    { Toggles.HitNotifUi, false },
 })
 
 local deviceBox = Tabs.Misc:AddRightGroupbox('device spoof')
@@ -16382,7 +12448,7 @@ local function dtcrealdevice()
         return "Mobile"
     elseif inputType == Enum.UserInputType.Gamepad1 then
         return "Console"
-    elseif inputType == Enum.UserInputType.VR then
+    elseif false then -- VR input type removed
         return "VR"
     else
         return "PC"
@@ -16390,8 +12456,8 @@ local function dtcrealdevice()
 end
 
 local function applydevice()
-    if not _G.Features.DeviceSpoof.Enabled then 
-        return 
+    if not _G.Features or not _G.Features.DeviceSpoof or not _G.Features.DeviceSpoof.Enabled then
+        return
     end
     
     local device = _G.Features.DeviceSpoof.CurrentDevice
@@ -16435,7 +12501,7 @@ local function applydevice()
 end
 
 local function reapplydevice()
-    if not _G.Features.DeviceSpoof.Enabled then return end
+    if not _G.Features or not _G.Features.DeviceSpoof or not _G.Features.DeviceSpoof.Enabled then return end
     local curtime = tick()
     if curtime - _G.Features.DeviceSpoof.LastApplied > 30 then
         applydevice()
@@ -16444,9 +12510,11 @@ end
 
 deviceBox:AddToggle('device_spoof', {
     Text = 'enable',
-    Default = _G.Features.DeviceSpoof.Enabled,
+    Default = _G.Features and _G.Features.DeviceSpoof and _G.Features.DeviceSpoof.Enabled or false,
     Callback = function(Value)
-        _G.Features.DeviceSpoof.Enabled = Value
+        if _G.Features and _G.Features.DeviceSpoof then
+            _G.Features.DeviceSpoof.Enabled = Value
+        end
         if Value then
             applydevice()
         end
@@ -16455,12 +12523,14 @@ deviceBox:AddToggle('device_spoof', {
 
 deviceBox:AddDropdown('device_type', {
     Text = 'device',
-    Default = _G.Features.DeviceSpoof.CurrentDevice,
+    Default = _G.Features and _G.Features.DeviceSpoof and _G.Features.DeviceSpoof.CurrentDevice or "Console",
     Values = {"Mobile", "Console", "VR", "PC"},
     Callback = function(Value)
-        _G.Features.DeviceSpoof.CurrentDevice = Value
-        if _G.Features.DeviceSpoof.Enabled then
-            applydevice()
+        if _G.Features and _G.Features.DeviceSpoof then
+            _G.Features.DeviceSpoof.CurrentDevice = Value
+            if _G.Features.DeviceSpoof.Enabled then
+                applydevice()
+            end
         end
     end
 })
@@ -16470,21 +12540,25 @@ local slideBox = Tabs.Misc:AddRightGroupbox('slide boost')
 
 slideBox:AddToggle('slide_boost', {
     Text = 'enable',
-    Default = _G.Features.SlideBoost.Enabled,
+    Default = _G.Features and _G.Features.SlideBoost and _G.Features.SlideBoost.Enabled or false,
     Callback = function(Value)
-        _G.Features.SlideBoost.Enabled = Value
+        if _G.Features and _G.Features.SlideBoost then
+            _G.Features.SlideBoost.Enabled = Value
+        end
     end
 })
 
 slideBox:AddSlider('slide_speed', {
     Text = 'slide boost',
-    Default = _G.Features.SlideBoost.Speed,
+    Default = _G.Features and _G.Features.SlideBoost and _G.Features.SlideBoost.Speed or 300,
     Min = 50,
     Max = 1000,
     Compact = true,
     Rounding = 0,
     Callback = function(Value)
-        _G.Features.SlideBoost.Speed = Value
+        if _G.Features and _G.Features.SlideBoost then
+            _G.Features.SlideBoost.Speed = Value
+        end
     end
 })
 
@@ -16517,7 +12591,7 @@ task.spawn(function()
     
     local connection
     connection = RunService.RenderStepped:Connect(function()
-        if _G.Features.SlideBoost.Enabled and mech and mech.IsSliding then
+        if _G.Features and _G.Features.SlideBoost and _G.Features.SlideBoost.Enabled and mech and mech.IsSliding then
             local success = pcall(function()
                 mech._sliding_velocity.Velocity = mech._sliding_velocity.Velocity.Unit * _G.Features.SlideBoost.Speed
             end)
@@ -16544,7 +12618,7 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
-    if _G.Features.DeviceSpoof.Enabled then
+    if _G.Features and _G.Features.DeviceSpoof and _G.Features.DeviceSpoof.Enabled then
         task.wait(0.5)
         applydevice()
     end
@@ -16553,7 +12627,7 @@ end)
 task.spawn(function()
     game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 10)
     task.wait(2)
-    if _G.Features.DeviceSpoof.Enabled then
+    if _G.Features and _G.Features.DeviceSpoof and _G.Features.DeviceSpoof.Enabled then
         applydevice()
     end
 end)
@@ -16593,6 +12667,7 @@ local function qolLightingOverrideActive(ls, key)
     return entry ~= nil and entry.Enabled == true
 end
  
+    _G.Features = _G.Features or {}
 _G.Features.QOL = _G.Features.QOL or {
     MotionBlur          = false,
     MotionBlurAmount    = 8,
@@ -16601,6 +12676,8 @@ _G.Features.QOL = _G.Features.QOL or {
     Shaders             = false,
 }
  
+local motionBlur
+
 local qolBox = Tabs.Misc:AddLeftGroupbox('QOL')
  
 qolBox:AddToggle('motion_blur_enabled', {
@@ -16645,7 +12722,10 @@ qolBox:AddToggle('smooth_gameplay', {
         _G.Features.QOL.SmoothGameplay = Value
     end
 })
- 
+
+local applyultramodaurashadersminecraft
+local removeshaders
+
 qolBox:AddToggle('shaders_enabled', {
     Text    = 'shaders',
     Default = false,
@@ -16673,9 +12753,33 @@ qolBox:AddToggle('shaders_enabled', {
     end
 })
  
+qolBox:AddToggle('projectile_speed', {
+    Text    = 'projectile speed',
+    Default = false,
+    Callback = function(Value)
+        getgenv().CombatMods.ProjectileSpeed = Value
+    end
+})
+
+qolBox:AddToggle('equip_cooldown', {
+    Text    = 'equip cooldown',
+    Default = false,
+    Callback = function(Value)
+        getgenv().CombatMods.EquipCooldown = Value
+    end
+})
+
+qolBox:AddToggle('no_reload', {
+    Text    = 'no reload',
+    Default = false,
+    Callback = function(Value)
+        getgenv().CombatMods.NoReload = Value
+    end
+})
+
 local camera     = workspace.CurrentCamera
 local lastVector = camera.CFrame.LookVector
-local motionBlur = Instance.new("BlurEffect", camera)
+motionBlur = Instance.new("BlurEffect", camera)
 motionBlur.Name  = 'QOL_MotionBlur'
 motionBlur.Size  = 0
 local runsvc2 = game:GetService("RunService")
@@ -16701,7 +12805,7 @@ runsvc2.Heartbeat:Connect(function()
         motionBlur.Size = 0
     end
  
-    if _G.Features.QOL.MotionBlur then
+    if _G.Features and _G.Features.QOL and _G.Features.QOL.MotionBlur then
         local magnitude = (camera.CFrame.LookVector - lastVector).Magnitude
         motionBlur.Size = math.abs(magnitude) * _G.Features.QOL.MotionBlurAmount * _G.Features.QOL.MotionBlurAmplifier / 2
     else
@@ -16739,7 +12843,7 @@ local function savelightoriginals()
     origtechnology = Lighting.Technology
 end
  
-function applyultramodaurashadersminecraft()
+applyultramodaurashadersminecraft = function()
     savelightoriginals()
  
     pcall(function()
@@ -16843,13 +12947,13 @@ function applyultramodaurashadersminecraft()
     task.spawn(refreshShadows)
  
     workspace.DescendantAdded:Connect(function(v)
-        if _G.Features.QOL.Shaders and v:IsA("BasePart") then
+        if _G.Features and _G.Features.QOL and _G.Features.QOL.Shaders and v:IsA("BasePart") then
             pcall(function() v.CastShadow = true end)
         end
     end)
 end
  
-function removeshaders()
+removeshaders = function()
     for _, obj in ipairs(shaderobjs) do
         if obj and obj.Parent then
             obj:Destroy()
@@ -16925,7 +13029,7 @@ task.spawn(function()
         fpsCursor = (fpsCursor % FPS_HISTORY) + 1
         local avgFps = fpsSum / FPS_HISTORY
  
-        if _G.Features.QOL.SmoothGameplay then
+        if _G.Features and _G.Features.QOL and _G.Features.QOL.SmoothGameplay then
             if avgFps < 45 then
                 pcall(task.desynchronize)
                 pcall(task.synchronize)
@@ -16940,7 +13044,7 @@ task.spawn(function()
     Players.PlayerRemoving:Connect(function(p)
         if p == LocalPlayer then
             pcall(function() RunService:UnbindFromRenderStep('QOL_SmoothGameplay') end)
-            if _G.Features.QOL.Shaders then removeshaders() end
+            if _G.Features and _G.Features.QOL and _G.Features.QOL.Shaders then removeshaders() end
         end
     end)
 end)
@@ -17045,7 +13149,7 @@ espgui.DisplayOrder = 9e9
 espgui.ResetOnSpawn = false
 espgui.IgnoreGuiInset = true
 espgui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-espgui.Parent = game.CoreGui
+espgui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 local r15bones = {
     {"UpperTorso", "Head"},
@@ -17296,9 +13400,10 @@ local function CreateBox(player)
         box.skeleton.lines[i] = line
     end
 
-    local studsgui = Instance.new("ScreenGui", game.CoreGui)
-    local namegui = Instance.new("ScreenGui", game.CoreGui)
-    local toolgui = Instance.new("ScreenGui", game.CoreGui)
+    local _coreGui = (gethui and gethui()) or game:GetService("CoreGui")
+    local studsgui = Instance.new("ScreenGui", _coreGui)
+    local namegui = Instance.new("ScreenGui", _coreGui)
+    local toolgui = Instance.new("ScreenGui", _coreGui)
 
     box.text = {}
     box.text.studs = makelabel(studsgui)
@@ -18897,6 +15002,8 @@ local function lightupdater()
     end)
 end
 
+local origatmo
+
 local function stoplightupdater()
     if updateconn then
         updateconn:Disconnect()
@@ -19177,11 +15284,10 @@ lightbox:AddSlider('lighting_specular_value', {
     end
 })
 
-local fxTabbox = Tabs.Visuals:AddRightTabbox()
-local colorTab = fxTabbox:AddTab('color')
-local bloomTab = fxTabbox:AddTab('bloom')
+local colorBox = Tabs.Visuals:AddRightGroupbox('color')
+local bloomBox = Tabs.Visuals:AddRightGroupbox('bloom')
 
-colorTab:AddToggle('lighting_color_correction', {
+colorBox:AddToggle('lighting_color_correction', {
     Text = 'enable',
     Default = _G.LightingSettings.ColorCorrection.Enabled,
     Callback = function(v)
@@ -19190,7 +15296,7 @@ colorTab:AddToggle('lighting_color_correction', {
     end
 })
 
-colorTab:AddSlider('lighting_cc_contrast', {
+colorBox:AddSlider('lighting_cc_contrast', {
     Text = 'contrast',
     Min = -10,
     Max = 10,
@@ -19205,7 +15311,7 @@ colorTab:AddSlider('lighting_cc_contrast', {
     end
 })
 
-colorTab:AddSlider('lighting_cc_saturation', {
+colorBox:AddSlider('lighting_cc_saturation', {
     Text = 'saturation',
     Min = -10,
     Max = 10,
@@ -19220,7 +15326,7 @@ colorTab:AddSlider('lighting_cc_saturation', {
     end
 })
 
-colorTab:AddSlider('lighting_cc_brightness', {
+colorBox:AddSlider('lighting_cc_brightness', {
     Text = 'brightness',
     Min = -10,
     Max = 10,
@@ -19235,7 +15341,7 @@ colorTab:AddSlider('lighting_cc_brightness', {
     end
 })
 
-bloomTab:AddToggle('lighting_bloom_modifier', {
+bloomBox:AddToggle('lighting_bloom_modifier', {
     Text = 'enable',
     Default = _G.LightingSettings.Bloom.Enabled,
     Callback = function(v)
@@ -19247,7 +15353,7 @@ bloomTab:AddToggle('lighting_bloom_modifier', {
     end
 })
 
-bloomTab:AddSlider('lighting_bloom_multiplier', {
+bloomBox:AddSlider('lighting_bloom_multiplier', {
     Text = 'emissive intensity',
     Min = 0,
     Max = 1.5,
@@ -19265,7 +15371,7 @@ bloomTab:AddSlider('lighting_bloom_multiplier', {
     end
 })
 
-bloomTab:AddSlider('lighting_bloom_size', {
+bloomBox:AddSlider('lighting_bloom_size', {
     Text = 'glow size',
     Min = 2,
     Max = 8,
@@ -19283,7 +15389,7 @@ bloomTab:AddSlider('lighting_bloom_size', {
     end
 })
 
-bloomTab:AddSlider('lighting_bloom_threshold', {
+bloomBox:AddSlider('lighting_bloom_threshold', {
     Text = 'brightness threshold',
     Min = 0.5,
     Max = 1,
@@ -19323,7 +15429,9 @@ getgenv().crosshair = {
     refreshrate = 0,
     mode = "mouse",
     position = Vector2.new(0, 0),
-    crosshair_mode = "static", 
+    crosshair_mode = "static",
+    follow_target = false,
+    follow_target_smoothness = 0, 
 
     width = 1.5,
     length = 10,
@@ -19379,7 +15487,7 @@ local function gradcolor(position, rotation, color1, color2, color3)
     end
 end
 
-local WATERMARK_TEXT = "instance"
+local WATERMARK_TEXT = "Onyx"
 
 local textChars = {}
 for i = 1, #WATERMARK_TEXT do
@@ -19416,6 +15524,8 @@ for i = 1, 8 do
 end
 
 local last = 0
+local crosshairSmoothPos = Vector2.new(0, 0)
+local crosshairSmoothInit = false
 local angles = {0, 90, 180, 270}
 
 local function solve(a, r)
@@ -19494,26 +15604,37 @@ Run.PostSimulation:Connect(function()
     local cfg = getgenv().crosshair
 
     local pos
-    if cfg.crosshair_mode == "follow muzzle" then
+    if cfg.follow_target then
+        local fn = getgenv().getBestTargetScreenPos
+        local s = fn and fn()
+        if s then pos = s end
+    end
+    if not pos and cfg.crosshair_mode == "follow muzzle" then
         local muzzlePos = muzzlepos()
         if muzzlePos then
             local screenPos, onScreen = worldToScreen(muzzlePos, Cam)
             if onScreen then
                 pos = Vector2.new(screenPos.X, screenPos.Y)
-            else
-                pos = cfg.mode == "center" and Cam.ViewportSize/2 or
-                      cfg.mode == "mouse" and UIS:GetMouseLocation() or
-                      cfg.position
             end
-        else
-            pos = cfg.mode == "center" and Cam.ViewportSize/2 or
-                  cfg.mode == "mouse" and UIS:GetMouseLocation() or
-                  cfg.position
         end
-    else
+    end
+    if not pos then
         pos = cfg.mode == "center" and Cam.ViewportSize/2 or
               cfg.mode == "mouse" and UIS:GetMouseLocation() or
               cfg.position
+    end
+
+    if cfg.follow_target and cfg.follow_target_smoothness > 0 then
+        local smooth = cfg.follow_target_smoothness * 10
+        local alpha = math.clamp(1 / math.max(smooth, 1), 0, 1)
+        if not crosshairSmoothInit then
+            crosshairSmoothPos = pos
+            crosshairSmoothInit = true
+        end
+        crosshairSmoothPos = crosshairSmoothPos:Lerp(pos, alpha)
+        pos = crosshairSmoothPos
+    else
+        crosshairSmoothInit = false
     end
 
     if not cfg.enabled then
@@ -19662,7 +15783,7 @@ vcrosshair:AddToggle('showammo', {
     end
 })
 
-vcrosshair:AddDualSlider('ooetg', 'GradientRotation', {
+vcrosshair:AddSlider('ooetg', {
     Text = 'speed',
     Default = getgenv().crosshair.spin_speed,
     Min = 0,
@@ -19672,7 +15793,8 @@ vcrosshair:AddDualSlider('ooetg', 'GradientRotation', {
     Callback = function(Value)
         getgenv().crosshair.spin_speed = Value
     end
-}, {
+})
+vcrosshair:AddSlider('GradientRotation', {
     Text = 'rotation',
     Default = getgenv().crosshair.gradient_rotation,
     Min = 0,
@@ -19681,6 +15803,26 @@ vcrosshair:AddDualSlider('ooetg', 'GradientRotation', {
     Suffix = '',
     Callback = function(Value)
         getgenv().crosshair.gradient_rotation = Value
+    end
+})
+
+vcrosshair:AddToggle('crosshairfollowtarget', {
+    Text = 'follow target',
+    Default = false,
+    Callback = function(Value)
+        getgenv().crosshair.follow_target = Value
+    end
+})
+
+vcrosshair:AddSlider('crosshairfollowsmooth', {
+    Text = 'follow smoothness',
+    Default = 0,
+    Min = 0,
+    Max = 15,
+    Rounding = 0,
+    Suffix = '',
+    Callback = function(Value)
+        getgenv().crosshair.follow_target_smoothness = Value
     end
 })
 
@@ -19702,9 +15844,8 @@ local SoundService = game:GetService("SoundService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
-local atmotabbox = Tabs.World:AddRightTabbox()
-local atmotab = atmotabbox:AddTab('atmosphere')
-local ambienceTab   = atmotabbox:AddTab('ambience')
+local atmoBox = Tabs.World:AddRightGroupbox('atmosphere')
+local ambienceBox = Tabs.World:AddRightGroupbox('ambience')
 
 _G.LightingSettings.Atmosphere = _G.LightingSettings.Atmosphere or {
     Enabled = false,
@@ -19719,7 +15860,7 @@ _G.LightingSettings.Atmosphere = _G.LightingSettings.Atmosphere or {
     SoundVolume = 0.6
 }
 
-local origatmo = nil
+origatmo = nil
 local curambientsound = nil
 
 local ambientSounds = {
@@ -19809,7 +15950,7 @@ Players.LocalPlayer.CharacterAdded:Connect(function()
     playambientsound()
 end)
 
-atmotab:AddToggle('atmosphere_master', {
+atmoBox:AddToggle('atmosphere_master', {
     Text = 'enable',
     Default = _G.LightingSettings.Atmosphere.Enabled,
     Callback = function(v)
@@ -19832,7 +15973,7 @@ atmotab:AddToggle('atmosphere_master', {
     end
 })
 
-atmotab:AddDualSlider('atmosphere_density', 'atmosphere_haze', {
+atmoBox:AddSlider('atmosphere_density', {
     Text = 'density: ',
     Min = 0,
     Max = 1,
@@ -19843,7 +15984,8 @@ atmotab:AddDualSlider('atmosphere_density', 'atmosphere_haze', {
         _G.LightingSettings.Atmosphere.Density = v
         applycustomatmo()
     end
-}, {
+})
+atmoBox:AddSlider('atmosphere_haze', {
     Text = 'haze: ',
     Min = 0,
     Max = 5,
@@ -19856,7 +15998,7 @@ atmotab:AddDualSlider('atmosphere_density', 'atmosphere_haze', {
     end
 })
 
-atmotab:AddDualSlider('atmosphere_glare', 'atmosphere_offset', {
+atmoBox:AddSlider('atmosphere_glare', {
     Text = 'glare: ',
     Min = 0,
     Max = 5,
@@ -19867,7 +16009,8 @@ atmotab:AddDualSlider('atmosphere_glare', 'atmosphere_offset', {
         _G.LightingSettings.Atmosphere.Glare = v
         applycustomatmo()
     end
-}, {
+})
+atmoBox:AddSlider('atmosphere_offset', {
     Text = 'offset: ',
     Min = 0,
     Max = 1,
@@ -19880,7 +16023,7 @@ atmotab:AddDualSlider('atmosphere_glare', 'atmosphere_offset', {
     end
 })
 
-ambienceTab:AddToggle('atmosphere_sound_toggle', {
+ambienceBox:AddToggle('atmosphere_sound_toggle', {
     Text = 'enable',
     Default = _G.LightingSettings.Atmosphere.SoundEnabled,
     Callback = function(v)
@@ -19889,7 +16032,7 @@ ambienceTab:AddToggle('atmosphere_sound_toggle', {
     end
 })
 
-ambienceTab:AddDropdown('atmosphere_ambient_sound', {
+ambienceBox:AddDropdown('atmosphere_ambient_sound', {
     Text = 'ambient sound',
     Values = {"None", "Rain", "Night", "Birds Chirping", "Jungle Birds", "Campfire Crackling", "Night Crickets", "Snow Storm"},
     Default = _G.LightingSettings.Atmosphere.SelectedSound,
@@ -19900,7 +16043,7 @@ ambienceTab:AddDropdown('atmosphere_ambient_sound', {
     end
 })
 
-ambienceTab:AddSlider('atmosphere_sound_volume', {
+ambienceBox:AddSlider('atmosphere_sound_volume', {
     Text = 'volume',
     Min = 0,
     Max = 10,
@@ -20110,10 +16253,8 @@ end)();
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 
-local skyboxTabbox = Tabs.World:AddLeftTabbox()
-
-local skyTab      = skyboxTabbox:AddTab('skybox')
-local aspectTab   = skyboxTabbox:AddTab('aspect ratio')
+local skyBox = Tabs.World:AddLeftGroupbox('skybox')
+local aspectBox = Tabs.World:AddLeftGroupbox('aspect ratio')
 
 _G.SkyboxSettings = _G.SkyboxSettings or {
     Enabled = false,
@@ -20226,7 +16367,7 @@ local function stopSkyboxUpdater()
     removecustomsky()
 end
 
-skyTab:AddToggle('skybox_master', {
+skyBox:AddToggle('skybox_master', {
     Text = 'enable',
     Default = _G.SkyboxSettings.Enabled,
     Callback = function(v)
@@ -20245,7 +16386,7 @@ for name, _ in pairs(Skyboxes) do
 end
 table.sort(skyboxList)
 
-skyTab:AddDropdown('skybox_selection', {
+skyBox:AddDropdown('skybox_selection', {
     Text = 'skybox',
     Default = _G.SkyboxSettings.CurrentSkybox,
     Values = skyboxList,
@@ -20254,7 +16395,7 @@ skyTab:AddDropdown('skybox_selection', {
     end
 })
 
-skyTab:AddDropdown('disable_elements', {
+skyBox:AddDropdown('disable_elements', {
     Text = 'disable elements',
     Values = {"Sun", "Moon", "Stars"},
     Default = _G.SkyboxSettings.DisabledElements,
@@ -20316,7 +16457,7 @@ local function stopaspectratio()
     end)
 end
 
-aspectTab:AddToggle('aspect_ratio_master', {
+aspectBox:AddToggle('aspect_ratio_master', {
     Text = 'enable',
     Default = _G.AspectRatioSettings.Enabled,
     Callback = function(v)
@@ -20329,7 +16470,7 @@ aspectTab:AddToggle('aspect_ratio_master', {
     end
 })
 
-aspectTab:AddSlider('aspect_ratio_x', {
+aspectBox:AddSlider('aspect_ratio_x', {
     Text = 'X ratio',
     Default = _G.AspectRatioSettings.X,
     Min = 1,
@@ -20341,7 +16482,7 @@ aspectTab:AddSlider('aspect_ratio_x', {
     end
 })
 
-aspectTab:AddSlider('aspect_ratio_y', {
+aspectBox:AddSlider('aspect_ratio_y', {
     Text = 'Y ratio',
     Default = _G.AspectRatioSettings.Y,
     Min = 10,
@@ -20869,6 +17010,8 @@ end)
 
 Library:SetWatermark('instance')
 
+local kbHeartbeatConn
+
 Library:OnUnload(function()
     if WatermarkConnection then
         WatermarkConnection:Disconnect()
@@ -20908,7 +17051,6 @@ local KB_REFRESH_INTERVAL = 0.5
 local kbRefreshAccum = 0
 local kbLastSig = ""
 local kbThemeDirty = true
-local kbHeartbeatConn = nil
 
 local INSTANCE_KB_LABELS = {
     SilentAimKey = "silent aim",
@@ -21315,13 +17457,45 @@ if Window and Window.Holder then
 end
 task.defer(syncMenuOverlayUi)
 
-MenuGroup:AddLabel('menu bind'):AddKeyPicker('MenuKeybind', { 
-    Default = 'RightShift', 
-    NoUI = true, 
-    Text = 'menu keybind' 
-})
 
-Library.ToggleKeybind = Options.MenuKeybind
+getgenv().InstanceCenterWindow = function()
+    if not Window or not Window.Holder then return end
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        if cam then
+            local vs = cam.ViewportSize
+            local hs = Window.Holder
+            local sizeX = hs.Size.X.Offset
+            local sizeY = hs.Size.Y.Offset
+            if sizeX <= 0 or sizeY <= 0 then
+                sizeX = hs.AbsoluteSize.X
+                sizeY = hs.AbsoluteSize.Y
+            end
+            hs.Position = UDim2.fromOffset(
+                math.floor((vs.X - sizeX) / 2),
+                math.floor((vs.Y - sizeY) / 2)
+            )
+        end
+    end)
+end
+
+task.defer(function()
+    local cam = workspace.CurrentCamera
+    if cam then
+        local vs = cam.ViewportSize
+        if vs.X < 1280 or vs.Y < 720 then
+            local scaleX = math.clamp(vs.X / 1280, 0.5, 1)
+            local scaleY = math.clamp(vs.Y / 720, 0.5, 1)
+            local scale = math.min(scaleX, scaleY)
+            local newW = math.floor(700 * scale)
+            local newH = math.floor(600 * scale)
+            pcall(function()
+                Window.Holder.Size = UDim2.fromOffset(newW, newH)
+            end)
+            if getgenv().InstanceCenterWindow then getgenv().InstanceCenterWindow() end
+        end
+    end
+end)
 
 MenuGroup:AddToggle('KeybindVisible', {
     Text = 'keybind list',
@@ -21376,6 +17550,15 @@ end)();
 
 (function()
 local ServerGroup = Tabs['UI Settings']:AddRightGroupbox('server')
+
+ServerGroup:AddToggle('ACDebug', {
+    Text = 'AC Debug',
+    Default = false,
+    Tooltip = 'Prints [AC DETECTED] in console when anti-cheat triggers',
+    Callback = function(v)
+        getgenv().InstanceACDebug = v
+    end,
+})
 
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -21481,7 +17664,6 @@ end)
 end)();
 
 
-local characterSection = Tabs.Character:AddRightTabbox()
 local p = game:GetService("Players").LocalPlayer
 local workspace = game:GetService("Workspace")
 local runService = game:GetService("RunService")
@@ -21496,36 +17678,37 @@ local animPresets = {
     ["Small / Hide"] = "91194251426204", ["Sea Lion"] = "117932365044349", ["Gangnam"] = "104142334418357",
     ["NLE"] = "125783279336153", ["The Man"] = "88737074755910", ["Spider Shit"] = "74716792202343",
     ["Low Cortisol"] = "125822752810863", ["Rampage"] = "120605439830304",
+    ["Tornado"] = "118314972618293",
 }
 local animPresetNames = {
     "Meditate", "Orbit", "Orbit V2", "Orbit V3", "Floss", "OJ", "Kicking Feet", "Tweaking", "Crazy",
     "Crazy V2", "Take the L", "Hype", "Small / Hide", "Sea Lion", "Gangnam", "NLE", "The Man",
-    "Spider Shit", "Low Cortisol", "Rampage",
+    "Spider Shit", "Low Cortisol", "Rampage", "Tornado",
 }
 
-animPlayerTab:AddToggle("AnimEnabled", {
+animPlayerBox:AddToggle("AnimEnabled", {
     Text = "enabled",
     Default = false,
 }):AddKeyPicker("AnimKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "anim" })
 
-animPlayerTab:AddToggle("AnimServerVisible", {
+animPlayerBox:AddToggle("AnimServerVisible", {
     Text = "server side",
     Default = true,
 })
 
-animPlayerTab:AddToggle("AnimJitter", { Text = "jitter mode", Default = false })
-animPlayerTab:AddSlider("JitterSpeed", { Text = "jitter interval", Default = 0.1, Min = 0.01, Max = 2, Rounding = 2, Suffix = "s" })
-animPlayerTab:AddToggle("AnimLoop", { Text = "loop", Default = true })
-animPlayerTab:AddToggle("AnimAutoRespawn", { Text = "spawn proof", Default = true })
-animPlayerTab:AddInput("AnimForceID", { Default = "96579993895076", Text = "primary anim id", Placeholder = "numbers", Numeric = false, Finished = true })
-animPlayerTab:AddInput("AnimJitterID", { Default = "120819498172771", Text = "jitter anim id", Placeholder = "numbers", Numeric = false, Finished = true })
-animPlayerTab:AddSlider("AnimSpeed", { Text = "play speed", Default = 2, Min = 0.1, Max = 200, Rounding = 1 })
-animPlayerTab:AddDropdown("AnimPresetSelector", {
+animPlayerBox:AddToggle("AnimJitter", { Text = "jitter mode", Default = false })
+animPlayerBox:AddSlider("JitterSpeed", { Text = "jitter interval", Default = 0.1, Min = 0.01, Max = 2, Rounding = 2, Suffix = "s" })
+animPlayerBox:AddToggle("AnimLoop", { Text = "loop", Default = true })
+animPlayerBox:AddToggle("AnimAutoRespawn", { Text = "spawn proof", Default = true })
+animPlayerBox:AddInput("AnimForceID", { Default = "96579993895076", Text = "primary anim id", Placeholder = "numbers", Numeric = false, Finished = true })
+animPlayerBox:AddInput("AnimJitterID", { Default = "120819498172771", Text = "jitter anim id", Placeholder = "numbers", Numeric = false, Finished = true })
+animPlayerBox:AddSlider("AnimSpeed", { Text = "play speed", Default = 2, Min = 0.1, Max = 200, Rounding = 1 })
+animPlayerBox:AddDropdown("AnimPresetSelector", {
     Text = "primary presets",
     Values = animPresetNames,
     Default = "Meditate",
 })
-animPlayerTab:AddDropdown("AnimJitterSelector", {
+animPlayerBox:AddDropdown("AnimJitterSelector", {
     Text = "jitter presets",
     Values = animPresetNames,
     Default = "Crazy",
@@ -21547,10 +17730,10 @@ Options.AnimJitterSelector:OnChanged(function()
     end
 end)
 
-animPlayerTab:AddButton("play", function()
+animPlayerBox:AddButton("play", function()
     getgenv()._animCmd = "Play"
 end)
-animPlayerTab:AddButton("stop", function()
+animPlayerBox:AddButton("stop", function()
     getgenv()._animCmd = "Stop"
 end);
 
@@ -22000,7 +18183,7 @@ local smoothTexScanRunning = false
 local SMOOTH_TEX_BATCH = 128
 local smoothTexSaStore = Instance.new("Folder")
 smoothTexSaStore.Name = "\0SmoothTexSA"
-smoothTexSaStore.Parent = game.CoreGui
+smoothTexSaStore.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 local TARGET_TEXTURE_ASSET_ID = "7658055825"
 
@@ -22364,11 +18547,8 @@ ThemeManager:SetLibrary(Library)
 local themeManagerThemeUpdate = ThemeManager.ThemeUpdate
 function ThemeManager:ThemeUpdate()
     themeManagerThemeUpdate(self)
-    if getgenv().InstanceApplyAccentTheme then
-        pcall(getgenv().InstanceApplyAccentTheme)
-    end
-    if applyTargetHudTheme then
-        applyTargetHudTheme()
+    if getgenv().applyTargetHudTheme then
+        pcall(getgenv().applyTargetHudTheme)
     end
     if getgenv().InstanceApplyCosmeticUiTheme then
         pcall(getgenv().InstanceApplyCosmeticUiTheme)
@@ -22380,15 +18560,993 @@ function ThemeManager:ThemeUpdate()
     end
 end
 
-ThemeManager:ApplyToTab(Tabs['UI Settings'])
+function SaveManager:Delete(name)
+    if not name then return false, 'no config name' end
+    local path = self.Folder .. '/settings/' .. name .. '.json'
+    if isfile(path) then pcall(delfile, path) return true end
+    return false, 'file not found'
+end
+
+function SaveManager:SaveAutoloadConfig(name)
+    if not name then return false, 'no name' end
+    self:SetAutoloadName(name)
+    return true
+end
+
+function SaveManager:DeleteAutoLoadConfig()
+    self:SetAutoloadName('none')
+end
+
+function SaveManager:GetAutoloadConfig()
+    return self:GetAutoloadName() or 'none'
+end
 
 SaveManager:SetLibrary(Library)
-
 SaveManager:SetIgnoreIndexes({})
+SaveManager:IgnoreThemeSettings()
 
-ThemeManager:SetFolder('instance')
-SaveManager:SetFolder('instance/rivals')
-SaveManager:BuildConfigSection(Tabs['UI Settings'])
+ThemeManager:SetFolder('onyx')
+SaveManager:SetFolder('onyx/rivals')
+
+ThemeManager:ApplyToTab(Tabs['UI Settings'])
+
+Library:ConfigureNotifications({ PosY = 5, BarSide = 'Top' })
+
+do
+    local _origNotify = Library.Notify
+    Library.Notify = function(self, msg, dur)
+        if getgenv().InstanceSilentLoad then return end
+        return _origNotify(self, msg, dur)
+    end
+end
+local NotifyGroup = Tabs['UI Settings']:AddRightGroupbox('notifications')
+NotifyGroup:AddSlider('NotifPosX', { Text = 'position x', Default = 50, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Callback = function(v) Library:ConfigureNotifications({ PosX = v }) end })
+NotifyGroup:AddSlider('NotifPosY', { Text = 'position y', Default = 5, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Callback = function(v) Library:ConfigureNotifications({ PosY = v }) end })
+NotifyGroup:AddDropdown('NotifAlign', { Text = 'alignment', Default = 'Center', Values = {'Left', 'Center', 'Right'}, Callback = function(v) Library:ConfigureNotifications({ Alignment = v }) end })
+NotifyGroup:AddDropdown('NotifBarSide', { Text = 'bar side', Default = 'Top', Values = {'Top', 'Bottom'}, Callback = function(v) Library:ConfigureNotifications({ BarSide = v }) end })
+NotifyGroup:AddSlider('NotifTransparency', { Text = 'transparency', Default = 60, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Callback = function(v) Library:ConfigureNotifications({ Transparency = v }) end })
+
+task.spawn(function()
+    task.wait(2)
+    local autoloadFromFile = false
+    pcall(function()
+        if isfile("onyx/autoload.txt") and readfile("onyx/autoload.txt") == "true" then
+            autoloadFromFile = true
+        end
+    end)
+    local shouldAutoload = autoloadFromFile or (Toggles and Toggles.AutoLoadToggle and Toggles.AutoLoadToggle.Value)
+    if shouldAutoload then
+        getgenv().InstanceAutoloadEnabled = true
+        local wasSilent = getgenv().InstanceSilentLoad
+        if _silentLoadFlag or (Toggles and Toggles.SilentLoadToggle and Toggles.SilentLoadToggle.Value) then
+            getgenv().InstanceSilentLoad = true
+        end
+        pcall(function() SaveManager:LoadAutoloadConfig() end)
+        task.wait(0.5)
+        local list = SaveManager:RefreshConfigList()
+        for _, name in ipairs(list) do
+            if name == 'autosave' then
+                pcall(function() SaveManager:Load('autosave') end)
+                break
+            end
+        end
+        getgenv().InstanceSilentLoad = wasSilent
+    else
+        getgenv().InstanceAutoloadEnabled = false
+        if Toggles and Toggles.AutoLoadToggle then
+            pcall(function() Toggles.AutoLoadToggle:SetValue(false) end)
+        end
+    end
+    if _silentLoadFlag or (Toggles and Toggles.SilentLoadToggle and Toggles.SilentLoadToggle.Value) then
+        getgenv().InstanceSilentLoad = true
+    end
+end)
+
+-- Dynamic obfuscation
+local obfuscationKeys = {"CFG", "Ragebot", "VoidCamper", "CombatMods", "Features"}
+local function ObfuscateScript()
+    for _, name in ipairs(obfuscationKeys) do
+        local newName = name .. math.random(100, 999)
+        if _G[name] then
+            _G[newName] = _G[name]
+            _G[name] = nil
+        end
+    end
+end
+task.spawn(function()
+    while true do
+        task.wait(30 + math.random(0, 15))
+        ObfuscateScript()
+    end
+end)
+
+-- Safety checks
+local function IsSafe()
+    local cam = workspace.CurrentCamera
+    if not cam then return false end
+    for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+        local char = player.Character
+        if char and char:FindFirstChild("Admin") then
+            return false
+        end
+    end
+    local spec = cam:FindFirstChild("Spectator")
+    if spec then return false end
+    return true
+end
+
+-- Lua tab: features from message (2).txt
+do
+    local Players = game:GetService("Players")
+    local LP = Players.LocalPlayer
+    local RS = game:GetService("RunService")
+    local UIS = game:GetService("UserInputService")
+    local WS = workspace
+    local CAM = WS.CurrentCamera
+
+    local CFG = {
+        VOID_ENABLED = false, VOID_METHOD = "Quantum Tunneling", VOID_BYPASS_MODE = "Extreme Networking",
+        VOID_DRIFT_SPEED = 9e6, VOID_DRIFT_CHAOS = 0.98, VOID_Y_BASE = 1e10, VOID_Y_DRIFT_SPEED = 4e6, VOID_Y_DRIFT_RANGE = 2e9,
+        VOID_SCRAMBLE = true, VOID_SCRAMBLE_TIME = 1.2, VOID_EVADE = true, VOID_EVADE_RADIUS = 8e9, VOID_EVADE_SPEED = 6e9,
+        VOID_EVADE_COOLDOWN = 0.05, VOID_EVADE_VERT = 3e9, VOID_EVADE_VERT_BIAS = 0.5, VOID_EVADE_FORCE_UP = false,
+        VOID_LISSAJOUS_A = 2, VOID_LISSAJOUS_B = 3, VOID_FLICKER_INT = 0.05, VOID_GRAVITY_STR = 1e8, VOID_GHOSTING = false, VOID_GHOSTING_INT = 0.5,
+        DESYNC_ENABLED = true, DESYNC_TICK = 0.18, DESYNC_SPOOF_Y = 3, DESYNC_RADIUS = 22, DESYNC_WANDER_SPEED = 3.5, DESYNC_WANDER_CHAOS = 0.4,
+        ORBIT_ENABLED = false, ORBIT_SPEED = 5, ORBIT_MODE = "Default", ORBIT_STABILITY = 1, ORBIT_JITTER = 0,
+        HEIGHT_OFFSET = 50000, ELLIPSE_RATIO = 0.65, MIN_RADIUS = 200000, MAX_RADIUS = 12e9, LOCK_FOV = 120, PREDICTION = 0.22,
+        AA_ENABLED = false, AA_PITCH = "None", AA_JITTER_RANGE = 45, AA_MODE = "None", AA_SPEED = 15,
+        SPEED_ENABLED = true, WALK_SPEED = 65, INF_JUMP = true, NOCLIP = true, LOW_GRAVITY = true, GRAVITY_VAL = 35,
+        RAPID_FIRE = false, REMOVE_WARHORN_CD = false, MAGIC_BULLET = false, DESYNC_STANDALONE = false, SHOW_STUDS = false,
+    }
+
+    local elapsed, voidX, voidZ, voidYOffset, voidYDir = 0, 0, 0, 0, 1
+    local voidDirX, voidDirZ = math.random() * 2 - 1, math.random() * 2 - 1
+    local voidEvadeCD, desyncTimer, spoofAngle, spoofAngleDir = 0, 0, math.random() * math.pi * 2, (math.random() > 0.5) and 1 or -1
+    local spoofBaseX, spoofBaseZ, fakeGroundPos, inFlicker = 0, 0, Vector3.new(0, 3, 0), false
+    local groundY, groundUpdateT, intendedVoidPos = 0, 0, Vector3.new(0, CFG.VOID_Y_BASE, 0)
+    local origGravity = WS.Gravity
+    local luaVoidConn, luaAAConn, luaOrbitConn, luaSpeedConn, luaNCConn, luaIJConn, luaDesyncOnlyConn, luaStudsConn
+
+    local function hum() local c = LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
+    local function hrp() local c = LP.Character; return c and c:FindFirstChild("HumanoidRootPart") end
+
+    -- Magic Bullet
+    do
+        local MB = nil
+        local function initMB()
+            if MB then return end
+            local g = getgenv()
+            if g.__mb then g.__mb:Shutdown() end
+            local Players = game:GetService("Players")
+            local RSvc = game:GetService("RunService")
+            local RepS = game:GetService("ReplicatedStorage")
+            local me = Players.LocalPlayer
+            local GunMod = me.PlayerScripts and require(me.PlayerScripts.Modules.ItemTypes.Gun)
+            local Util = require(RepS.Modules.Utility)
+            if not GunMod then return end
+            g.__mb = {}
+            local m = g.__mb
+            function m:setup()
+                self.active = true; self.target = nil
+                self.desync = false; self.curr = nil
+                self.conn1 = RSvc.Heartbeat:Connect(function() if self.active then self.target = self:find() end end)
+                local orig = GunMod.StartShooting
+                self.old = orig
+                GunMod.StartShooting = function(obj, ...)
+                    local r = {orig(obj, ...)}
+                    if not obj.ClientFighter or not obj.ClientFighter.IsLocalPlayer then return unpack(r) end
+                    local data = r[3]
+                    if not data or typeof(data) ~= "table" then return unpack(r) end
+                    r[4] = true
+                    local tgt = self.target
+                    if not self.active or not tgt or not tgt.Character then return unpack(r) end
+                    if not self.desync or self.curr ~= tgt then self:dsStart(tgt) task.wait(0.1) end
+                    if self.task1 then task.cancel(self.task1) self.task1 = nil end
+                    local head = tgt.Character:FindFirstChild("Head")
+                    if not head then return unpack(r) end
+                    local p = head.Position
+                    local below = p - Vector3.new(0, 5, 0)
+                    local cf = CFrame.lookAt(below, p)
+                    local rnd = head.CFrame:ToObjectSpace(CFrame.new(p + Vector3.new(math.random(), math.random(), math.random())))
+                    data[utf8.char(0)] = Util:EncodeCFrame(CFrame.new(below, p) * CFrame.Angles(cf:ToOrientation()))
+                    data[utf8.char(1)] = Util:EncodeCFrame(CFrame.new(p) * CFrame.Angles(cf:ToOrientation()))
+                    data[utf8.char(2)] = head
+                    data[utf8.char(3)] = Util:EncodeCFrame(rnd)
+                    self.task1 = task.delay(0.15, function() self:dsStop() end)
+                    return unpack(r)
+                end
+            end
+            function m:find()
+                local my = hrp(); if not my then return nil end
+                local best, bd = nil, math.huge
+                for _, p in next, Players:GetPlayers() do
+                    if p ~= me and p.Character then
+                        local r = p.Character:FindFirstChild("HumanoidRootPart")
+                        local hd = p.Character:FindFirstChild("Head")
+                        local h = p.Character:FindFirstChildOfClass("Humanoid")
+                        if r and hd and h and h.Health > 0 and (my.Position - r.Position).Magnitude < 200 then
+                            local d = (my.Position - r.Position).Magnitude
+                            if d < bd then bd = d; best = p end
+                        end
+                    end
+                end
+                return best
+            end
+            function m:dsStart(tgt)
+                if self.conn2 then self.conn2:Disconnect() end
+                self.desync = true; self.curr = tgt
+                self.conn2 = RSvc.Heartbeat:Connect(function()
+                    if not self.desync then return end
+                    local my = hrp(); if not my then return end
+                    local tr = tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart")
+                    if not tr then self:dsStop() return end
+                    local savedCF, savedV, savedRV = my.CFrame, my.Velocity, my.RotVelocity
+                    my.CFrame = tr.CFrame * CFrame.new(0, -5, 0)
+                    RSvc:BindToRenderStep("__mb_restore", 101, function()
+                        my.CFrame = savedCF; my.Velocity = savedV; my.RotVelocity = savedRV
+                        RSvc:UnbindFromRenderStep("__mb_restore")
+                    end)
+                end)
+            end
+            function m:dsStop() self.desync = false; self.curr = nil
+                if self.conn2 then self.conn2:Disconnect() self.conn2 = nil end end
+            function m:Shutdown()
+                self.active = false
+                if self.conn1 then self.conn1:Disconnect() end
+                if self.conn2 then self.conn2:Disconnect() end
+                if self.task1 then task.cancel(self.task1) end
+                if self.old then GunMod.StartShooting = self.old end
+            end
+            m:setup()
+            MB = m
+        end
+        local function toggleMB(state)
+            CFG.MAGIC_BULLET = state
+            if state then if not MB then initMB() end
+            elseif MB then MB:Shutdown() MB = nil; getgenv().__mb = nil end
+        end
+
+        -- Void engine
+        local function compVoidDir(t)
+            local nx, nz, amp, freq = 0, 0, 1, 0.0001
+            for i = 1, 4 do nx = nx + math.noise(t * freq, 0) * amp; nz = nz + math.noise(0, t * freq) * amp; freq = freq * 2.37; amp = amp * 0.5 end
+            local len = math.sqrt(nx * nx + nz * nz)
+            if len < 0.001 then local a = t * 3.14159 * 0.1; return math.cos(a), math.sin(a) end
+            return nx / len, nz / len
+        end
+        local function stepVoid(dt)
+            local p = Vector3.new(voidX, CFG.VOID_Y_BASE + voidYOffset, voidZ)
+            local m = CFG.VOID_METHOD
+            if m == "Stable" then return p
+            elseif m == "Drift" then
+                local dx, dz = compVoidDir(elapsed)
+                voidDirX = voidDirX + (dx - voidDirX) * CFG.VOID_DRIFT_CHAOS * dt * 10
+                voidDirZ = voidDirZ + (dz - voidDirZ) * CFG.VOID_DRIFT_CHAOS * dt * 10
+                voidX = voidX + voidDirX * CFG.VOID_DRIFT_SPEED * dt; voidZ = voidZ + voidDirZ * CFG.VOID_DRIFT_SPEED * dt
+                voidYOffset = voidYOffset + voidYDir * CFG.VOID_Y_DRIFT_SPEED * dt
+                if math.abs(voidYOffset) >= CFG.VOID_Y_DRIFT_RANGE then voidYDir = -voidYDir end
+                return Vector3.new(voidX, CFG.VOID_Y_BASE + voidYOffset, voidZ)
+            elseif m == "Chaotic" then
+                voidX = voidX + (math.random() - 0.5) * CFG.VOID_DRIFT_SPEED * dt * 5
+                voidZ = voidZ + (math.random() - 0.5) * CFG.VOID_DRIFT_SPEED * dt * 5
+                return Vector3.new(voidX, CFG.VOID_Y_BASE + voidYOffset, voidZ)
+            elseif m == "Circle" then local r = 1e9; return Vector3.new(voidX + math.cos(elapsed * 2) * r, CFG.VOID_Y_BASE + voidYOffset, voidZ + math.sin(elapsed * 2) * r)
+            elseif m == "Spiral" then local r = 1e9 * (1 + math.sin(elapsed)); return Vector3.new(voidX + math.cos(elapsed * 3) * r, CFG.VOID_Y_BASE + voidYOffset, voidZ + math.sin(elapsed * 3) * r)
+            elseif m == "Lissajous" then local r = 2e9; return Vector3.new(voidX + math.sin(elapsed * CFG.VOID_LISSAJOUS_A) * r, CFG.VOID_Y_BASE + voidYOffset, voidZ + math.sin(elapsed * CFG.VOID_LISSAJOUS_B) * r)
+            elseif m == "Perlin Noise" then local t = elapsed * 0.1; return Vector3.new(voidX + math.noise(t, 0) * 5e9, CFG.VOID_Y_BASE + voidYOffset, voidZ + math.noise(0, t) * 5e9)
+            elseif m == "Quantum Tunneling" then local r = 1e11 * (math.random() > 0.5 and 1 or -1); local j = Vector3.new((math.random() - 0.5) * 2e9, (math.random() - 0.5) * 2e8, (math.random() - 0.5) * 2e9); return Vector3.new(voidX + r, CFG.VOID_Y_BASE + j.Y, voidZ + r) + j
+            elseif m == "Gravity Well" then local t = elapsed * 0.5; local r = CFG.VOID_GRAVITY_STR * (1 + math.sin(t)); return Vector3.new(voidX + math.cos(t) * r, CFG.VOID_Y_BASE + math.sin(t * 0.7) * r, voidZ + math.sin(t) * r)
+            elseif m == "Helix" then local r = 1e9; local t = elapsed * 2; return Vector3.new(voidX + math.cos(t) * r, CFG.VOID_Y_BASE + voidYOffset + math.sin(t * 0.5) * r, voidZ + math.sin(t) * r)
+            elseif m == "Figure 8" then local r = 1.5e9; local t = elapsed * 1.5; return Vector3.new(voidX + math.sin(t) * r, CFG.VOID_Y_BASE + voidYOffset, voidZ + math.sin(t) * math.cos(t) * r)
+            elseif m == "Tornado" then local r = 2e9 * math.abs(math.sin(elapsed)); local t = elapsed * 5; return Vector3.new(voidX + math.cos(t) * r, CFG.VOID_Y_BASE + math.sin(elapsed * 2) * 1e9, voidZ + math.sin(t) * r)
+            end
+            return p
+        end
+        local function voidEvade(dt)
+            if not CFG.VOID_EVADE or voidEvadeCD > 0 then return end
+            local minDist, threat = math.huge, Vector3.new()
+            for _, p in next, Players:GetPlayers() do
+                if p ~= LP and p.Character then
+                    local r = p.Character:FindFirstChild("HumanoidRootPart")
+                    local h = p.Character:FindFirstChildOfClass("Humanoid")
+                    if r and h and h.Health > 0 then
+                        local pred = r.Position + r.AssemblyLinearVelocity * 0.5; local d = (pred - intendedVoidPos).Magnitude
+                        if d < minDist then minDist = d; threat = (pred - intendedVoidPos).Unit end
+                    end
+                end
+            end
+            if minDist < CFG.VOID_EVADE_RADIUS then
+                local esc = threat * -1; local tl = math.clamp(1 - (minDist / CFG.VOID_EVADE_RADIUS), 0, 1)
+                voidX = voidX + esc.X * CFG.VOID_EVADE_SPEED * (1 + tl * 2)
+                voidZ = voidZ + esc.Z * CFG.VOID_EVADE_SPEED * (1 + tl * 2)
+                voidEvadeCD = CFG.VOID_EVADE_COOLDOWN * (1 - tl * 0.3)
+            end
+        end
+        local function isOffScreen(pos)
+            local cam = workspace.CurrentCamera
+            if not cam then return true end
+            local _, onScreen = cam:WorldToViewportPoint(pos)
+            return not onScreen
+        end
+
+        local function naturalVoidPos()
+            local root = hrp()
+            if not root then return intendedVoidPos end
+            local voidY = -900 - math.random(0, 200)
+            return Vector3.new(
+                root.Position.X + math.random(-50, 50),
+                voidY,
+                root.Position.Z + math.random(-50, 50)
+            )
+        end
+
+        local stepSpoof
+
+        local function lockVoid(dt)
+            if voidEvadeCD > 0 then voidEvadeCD = voidEvadeCD - dt end
+            voidEvade(dt)
+            intendedVoidPos = stepVoid(dt)
+            local rp = hrp(); if not rp then return end
+            local tgt = isOffScreen(rp.Position) and naturalVoidPos() or intendedVoidPos
+            if CFG.VOID_METHOD ~= "Stable" then local mt = tick() * 1000; tgt = tgt + Vector3.new(math.sin(mt * 0.1) * 50, math.sin(mt * 0.07) * 20, math.cos(mt * 0.13) * 50) end
+            if CFG.VOID_BYPASS_MODE == "Velocity" then pcall(function() rp.AssemblyLinearVelocity = (tgt - rp.Position) * 100 end)
+            elseif CFG.VOID_BYPASS_MODE == "CFrame only" then pcall(function() rp.CFrame = CFrame.new(tgt) end)
+            elseif CFG.VOID_BYPASS_MODE == "Hybrid" then pcall(function() rp.CFrame = CFrame.new(tgt); rp.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0) end)
+            else pcall(function() rp.CFrame = CFrame.new(tgt); rp.AssemblyLinearVelocity = Vector3.zero; rp.AssemblyAngularVelocity = Vector3.zero end) end
+            if CFG.DESYNC_ENABLED then
+                desyncTimer = desyncTimer + dt
+                if desyncTimer >= CFG.DESYNC_TICK then
+                    desyncTimer = 0
+                    local hrp2 = hrp()
+                    if hrp2 then
+                        local sc = hrp2.CFrame; local sv = hrp2.Velocity; local sr = hrp2.RotVelocity
+                        stepSpoof(dt)
+                        hrp2.CFrame = CFrame.new(fakeGroundPos)
+                        hrp2.AssemblyLinearVelocity = Vector3.new(0, -0.01, 0)
+                        task.delay(0, function()
+                            local h3 = hrp()
+                            if h3 and CFG.VOID_ENABLED then h3.CFrame = sc; h3.Velocity = sv; h3.RotVelocity = sr end
+                        end)
+                    end
+                end
+            end
+        end
+        stepSpoof = function(dt)
+            spoofAngle = spoofAngle + spoofAngleDir * (1.5 + math.noise(elapsed * 0.8, 42.0) * CFG.DESYNC_WANDER_CHAOS) * CFG.DESYNC_WANDER_SPEED * dt
+            if math.noise(elapsed * 0.3, 7.7) > 0.6 then spoofAngleDir = -spoofAngleDir end
+            local r = CFG.DESYNC_RADIUS * (0.5 + 0.5 * math.abs(math.noise(elapsed * 0.5, 0)))
+            fakeGroundPos = Vector3.new(spoofBaseX + math.cos(spoofAngle) * r, groundY, spoofBaseZ + math.sin(spoofAngle) * r)
+        end
+        local function startVoid()
+            if luaVoidConn then luaVoidConn:Disconnect() end
+            task.spawn(function() local r = hrp(); if r then pcall(function() r:SetNetworkOwner(LP) end) end end)
+            local r = hrp()
+            if r then voidX = r.Position.X; voidZ = r.Position.Z; intendedVoidPos = Vector3.new(voidX, CFG.VOID_Y_BASE, voidZ); spoofBaseX = r.Position.X; spoofBaseZ = r.Position.Z end
+            luaVoidConn = RS.Heartbeat:Connect(function(dt)
+                if not CFG.VOID_ENABLED then luaVoidConn:Disconnect(); luaVoidConn = nil; return end
+                elapsed = elapsed + dt; lockVoid(dt)
+            end)
+        end
+
+        -- AA engine
+        local aaK, aaJ = 0, 0
+        local function startAA()
+            if luaAAConn then luaAAConn:Disconnect() end
+            aaK = 0; aaJ = 0
+            luaAAConn = RS.Heartbeat:Connect(function(dt)
+                if not CFG.AA_ENABLED then luaAAConn:Disconnect(); luaAAConn = nil; return end
+                local r = hrp(); if not r then return end
+                aaK = aaK + dt; aaJ = (aaJ + dt * (CFG.AA_SPEED * 10)) % 360
+                local ay = 0; local ax = 0
+                if CFG.AA_PITCH == "Down" then ax = math.rad(-90) elseif CFG.AA_PITCH == "Flip" then ax = math.rad(-180) elseif CFG.AA_PITCH == "Up" then ax = math.rad(90) end
+                if CFG.AA_MODE == "Jitter" then ay = math.rad(math.random(-CFG.AA_JITTER_RANGE, CFG.AA_JITTER_RANGE))
+                elseif CFG.AA_MODE == "Sway" then ay = math.sin(aaK * (CFG.AA_SPEED / 5)) * math.rad(CFG.AA_JITTER_RANGE)
+                elseif CFG.AA_MODE == "Spin" then ay = math.rad(aaJ) end
+                local nc = r.CFrame * CFrame.Angles(ax, ay, 0)
+                if CFG.AA_PITCH == "Flip" then nc = nc * CFrame.Angles(0, 0, math.rad(180)) end
+                pcall(function() r.CFrame = nc; r.AssemblyLinearVelocity = Vector3.new(0, -0.01, 0) end)
+            end)
+        end
+
+        -- Orbit engine
+        local orbitAngle = math.random(0, 360)
+        local function startOrbit()
+            if luaOrbitConn then luaOrbitConn:Disconnect() end
+            pcall(function() CAM.CameraType = Enum.CameraType.Scriptable end)
+            luaOrbitConn = RS.Heartbeat:Connect(function(dt)
+                if not CFG.ORBIT_ENABLED then luaOrbitConn:Disconnect(); luaOrbitConn = nil; pcall(function() CAM.CameraType = Enum.CameraType.Custom end); return end
+                elapsed = elapsed + dt
+                pcall(function() if CAM.CameraType ~= Enum.CameraType.Scriptable then CAM.CameraType = Enum.CameraType.Scriptable end end)
+                local best, bd = nil, math.huge
+                local my = hrp()
+                for _, p in next, Players:GetPlayers() do
+                    if p ~= LP and p.Character then
+                        local r = p.Character:FindFirstChild("HumanoidRootPart"); local h = p.Character:FindFirstChildOfClass("Humanoid")
+                        if r and h and h.Health > 0 then
+                            local d = my and (my.Position - r.Position).Magnitude or 0
+                            if d < bd then bd = d; best = p end
+                        end
+                    end
+                end
+                if best and best.Character then
+                    local tr = best.Character:FindFirstChild("HumanoidRootPart")
+                    if tr then
+                        local vel = tr.AssemblyLinearVelocity; local rp = tr.Position + vel * CFG.PREDICTION
+                        orbitAngle = orbitAngle + CFG.ORBIT_SPEED * dt
+                        local m = CFG.ORBIT_MODE; local rb = CFG.MIN_RADIUS + (CFG.MAX_RADIUS - CFG.MIN_RADIUS) * 0.5
+                        local offset
+                        if m == "Default" then local r = CFG.MIN_RADIUS + (CFG.MAX_RADIUS - CFG.MIN_RADIUS) * (0.5 + 0.5 * math.sin(elapsed * 0.3)); offset = Vector3.new(math.cos(orbitAngle) * r, CFG.HEIGHT_OFFSET, math.sin(orbitAngle) * r)
+                        elseif m == "Helix" then offset = Vector3.new(math.cos(orbitAngle) * rb, CFG.HEIGHT_OFFSET + math.sin(orbitAngle * 2) * 50000, math.sin(orbitAngle) * rb)
+                        elseif m == "Figure 8" then offset = Vector3.new(math.sin(orbitAngle) * rb, CFG.HEIGHT_OFFSET, math.sin(orbitAngle) * math.cos(orbitAngle) * rb)
+                        elseif m == "Tornado" then local r = CFG.MIN_RADIUS + (CFG.MAX_RADIUS - CFG.MIN_RADIUS) * (0.3 + 0.7 * math.abs(math.sin(elapsed * 2))); offset = Vector3.new(math.cos(orbitAngle * 3) * r, CFG.HEIGHT_OFFSET + math.sin(elapsed * 10) * 100000, math.sin(orbitAngle * 3) * r)
+                        else offset = Vector3.new(math.cos(orbitAngle) * rb, CFG.HEIGHT_OFFSET, math.sin(orbitAngle) * rb) end
+                        local jitter = Vector3.new((math.random() - 0.5) * 2 * CFG.ORBIT_JITTER, (math.random() - 0.5) * 2 * CFG.ORBIT_JITTER, (math.random() - 0.5) * 2 * CFG.ORBIT_JITTER)
+                        local cf = CFrame.lookAt(rp + offset + jitter, rp)
+                        local lerp = math.clamp(0.12 + vel.Magnitude * 0.004, 0.12, 0.45)
+                        pcall(function() CAM.CFrame = CAM.CFrame:Lerp(cf, lerp * CFG.ORBIT_STABILITY) end)
+                    end
+                end
+            end)
+        end
+
+        -- Speed / Noclip / InfJump / Gravity
+        local speedConn, noclipConn, ijConn
+        local function applySpeed()
+            if speedConn then speedConn:Disconnect() end
+            local h = hum(); if h then h.WalkSpeed = CFG.SPEED_ENABLED and CFG.WALK_SPEED or 16 end
+            if CFG.SPEED_ENABLED then
+                speedConn = RS.Heartbeat:Connect(function()
+                    if not CFG.SPEED_ENABLED then speedConn:Disconnect(); speedConn = nil; return end
+                    local h2 = hum(); if h2 and h2.WalkSpeed ~= CFG.WALK_SPEED then h2.WalkSpeed = CFG.WALK_SPEED end
+                end)
+            end
+        end
+        local function toggleNoclip(state)
+            if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+            if state then
+                noclipConn = RS.Stepped:Connect(function()
+                    if not CFG.NOCLIP then noclipConn:Disconnect(); noclipConn = nil; return end
+                    local c = LP.Character; if c then for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end end
+                end)
+            else
+                pcall(function() local c = LP.Character; if c then for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end end end)
+            end
+        end
+        local function toggleIJ(state)
+            if ijConn then ijConn:Disconnect(); ijConn = nil end
+            if state then
+                ijConn = UIS.JumpRequest:Connect(function() if CFG.INF_JUMP then local h = hum(); if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
+            end
+        end
+        local function toggleDesyncOnly(state)
+            if luaDesyncOnlyConn then luaDesyncOnlyConn:Disconnect(); luaDesyncOnlyConn = nil end
+            if state then
+                local acc = 0; local flicker = false
+                local rp = hrp(); if rp then spoofBaseX = rp.Position.X; spoofBaseZ = rp.Position.Z end
+                luaDesyncOnlyConn = RS.Heartbeat:Connect(function(dt)
+                    if not CFG.DESYNC_STANDALONE then luaDesyncOnlyConn:Disconnect(); luaDesyncOnlyConn = nil; return end
+                    local r = hrp(); if not r then return end
+                    acc = acc + dt; if acc < CFG.DESYNC_TICK then return end; acc = 0
+                    stepSpoof(dt)
+                    if not flicker then
+                        local sc = r.CFrame
+                        r.CFrame = CFrame.new(fakeGroundPos); r.AssemblyLinearVelocity = Vector3.new(0, -0.01, 0)
+                        task.delay(0.016, function() local r2 = hrp(); if r2 and CFG.DESYNC_STANDALONE then r2.CFrame = sc; r2.AssemblyLinearVelocity = Vector3.zero end end)
+                    end
+                    flicker = not flicker
+                end)
+            end
+        end
+
+        -- Rapid fire
+        local rfLoop, origCDs
+        local function toggleRF(state)
+            CFG.RAPID_FIRE = state
+            if rfLoop then task.cancel(rfLoop); rfLoop = nil end
+            if state then
+                rfLoop = task.spawn(function()
+                    while CFG.RAPID_FIRE do
+                        pcall(function()
+                            local lib = game:GetService("ReplicatedStorage").Modules:FindFirstChild("ItemLibrary")
+                            if lib then
+                                local IL = require(lib)
+                                local function scan(t)
+                                    for _, v in pairs(t) do if type(v) == "table" then if v.ShootCooldown ~= nil then v.ShootCooldown = 1e-18 end; scan(v) end end
+                                end
+                                scan(IL)
+                            end
+                        end)
+                        task.wait(1.5)
+                    end
+                end)
+            end
+        end
+
+        -- Warhorn CD
+        local whLoop, origWH = nil, {}
+        local function toggleWH(state)
+            CFG.REMOVE_WARHORN_CD = state
+            if whLoop then task.cancel(whLoop); whLoop = nil end
+            if state then
+                local function patch()
+                    local lib = game:GetService("ReplicatedStorage").Modules:FindFirstChild("ItemLibrary")
+                    if not lib then return end
+                    local ok, IL = pcall(require, lib); if not ok or type(IL) ~= "table" then return end
+                    local items = IL.Items or IL.Weapons or IL.Utilities
+                    if type(items) ~= "table" then return end
+                    for _, item in pairs(items) do
+                        if type(item) == "table" and (item.Name == "War Horn" or item.Name == "WarHorn") then
+                            for _, f in ipairs({"Cooldown", "AttackCooldown", "UseDelay", "FireCooldown"}) do
+                                if item[f] ~= nil then if not origWH[item] then origWH[item] = {} end; if origWH[item][f] == nil then origWH[item][f] = item[f] end; item[f] = 0 end
+                            end
+                        end
+                    end
+                end
+                patch()
+                whLoop = task.spawn(function() while CFG.REMOVE_WARHORN_CD do patch(); task.wait(2) end end)
+            else
+                for item, fields in pairs(origWH) do pcall(function() for f, v in pairs(fields) do item[f] = v end end) end; origWH = {}
+            end
+        end
+
+        -- Studs monitor
+        local studsGui, studsFrame = nil, nil
+        local function toggleStuds(state)
+            CFG.SHOW_STUDS = state
+            if luaStudsConn then luaStudsConn:Disconnect(); luaStudsConn = nil end
+            if not studsGui then
+                studsGui = Instance.new("ScreenGui"); studsGui.Name = "OnyxStuds"; studsGui.IgnoreGuiInset = true; studsGui.ResetOnSpawn = false
+                pcall(function() studsGui.Parent = game:GetService("CoreGui") end)
+                if not studsGui.Parent then studsGui.Parent = LP:WaitForChild("PlayerGui") end
+                studsFrame = Instance.new("Frame"); studsFrame.Size = UDim2.new(0, 200, 0, 24); studsFrame.Position = UDim2.new(0.5, -100, 0, 8)
+                studsFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); studsFrame.BackgroundTransparency = 0.15; studsFrame.BorderColor3 = Color3.fromRGB(45, 45, 55); studsFrame.Parent = studsGui
+                local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 1, 0); lbl.BackgroundTransparency = 1
+                lbl.TextColor3 = Color3.fromRGB(200, 200, 220); lbl.Font = Enum.Font.Code; lbl.TextSize = 12; lbl.Parent = studsFrame
+                studsFrame:FindFirstChildOfClass("TextLabel").Name = "posLabel"
+            end
+            studsFrame.Visible = state
+            if state then
+                luaStudsConn = RS.Heartbeat:Connect(function()
+                    local r = hrp()
+                    local lbl = studsFrame:FindFirstChild("posLabel")
+                    if lbl then lbl.Text = r and string.format("x: %.1f y: %.1f z: %.1f", r.Position.X, r.Position.Y, r.Position.Z) or "n/a" end
+                end)
+            end
+        end
+
+        -- Skins tab UI
+        do
+            local SC = getgenv()._SC
+            local ss = SC.skinState
+            local WEAPONS = {
+                "Assault Rifle","Bow","Burst Rifle","Crossbow","Energy Rifle",
+                "Flamethrower","Grenade Launcher","Gunblade","RPG","Shotgun",
+                "Sniper","Planethover","Hinigun","Paintball Gun","Distortion",
+                "Handgun","Daggers","Flare Gun","Revolver","Shorty","Spray",
+                "Uzi","Energy Pistols","Exogun","Slingshot","Harper",
+                "Fists","Battle Axe","Chainsaw","Katana","Knife","Riot Shield",
+                "Scythe","Hail","Spear","Trouel",
+                "Grenade","Flashbang","Freeze Ray","Jump Pad","Holotoy",
+                "Satchel","Smoke Grenade","War Horn","Hedkit",
+                "Subspace Triplane","Harpstone","Grappler"
+            }
+            table.sort(WEAPONS)
+
+            local function getKeysByType(typ)
+                local keys = {}
+                local lib = ss.mods.CosmeticLibrary
+                if not lib then return keys end
+                for k, data in pairs(lib.Cosmetics) do
+                    if data and (data.Type == typ or data.Category == typ) then keys[#keys + 1] = k end
+                end
+                table.sort(keys)
+                return keys
+            end
+
+            local function buildDisplayList(keys)
+                local lib = ss.mods.CosmeticLibrary
+                local list = {"None"} local map = {}
+                for _, k in ipairs(keys) do
+                    local data = lib and lib.Cosmetics[k]
+                    local display = data and data.DisplayName or k
+                    list[#list + 1] = display
+                    map[display] = k
+                end
+                return list, map
+            end
+
+            local skinKeys = getKeysByType("Skin")
+            local skinList, skinMap = buildDisplayList(skinKeys)
+            local wrapList, wrapMap = buildDisplayList(getKeysByType("Wrap"))
+            local charmList, charmMap = buildDisplayList(getKeysByType("Charm"))
+            local danceList, danceMap = buildDisplayList(getKeysByType("Dance"))
+            local emoteList, emoteMap = buildDisplayList(getKeysByType("Emote"))
+
+            local function keyFromDisplay(disp, map)
+                if disp == "None" then return "None" end
+                return map and map[disp] or nil
+            end
+
+            local SkinsL = Tabs.Skins:AddLeftGroupbox('unlock')
+            local SkinsR = Tabs.Skins:AddRightGroupbox('cosmetics')
+
+            SkinsL:AddToggle('UnlockAll', {
+                Text = 'unlock all cosmetics',
+                Default = false,
+                Callback = function(v)
+                    if v then SC.scUnlockAll() else SC.scLockAll() end
+                end
+            })
+
+            SkinsL:AddDivider()
+            SkinsL:AddLabel('equipped loadout:')
+
+            local loadoutLabel = SkinsL:AddLabel('None', true)
+
+            local function updateLoadout()
+                local lib = ss.mods.CosmeticLibrary
+                local lines = {}
+                for w, cos in pairs(ss.equipped) do
+                    local parts = {}
+                    for ct, data in pairs(cos) do
+                        if data and data.Name then
+                            local disp = lib and lib.Cosmetics[data.Name] and lib.Cosmetics[data.Name].DisplayName or data.Name
+                            parts[#parts + 1] = ct .. ": " .. disp
+                        end
+                    end
+                    if #parts > 0 then
+                        lines[#lines + 1] = w .. " -> " .. table.concat(parts, " | ")
+                    end
+                end
+                if #lines == 0 then loadoutLabel:SetText("None") else loadoutLabel:SetText(table.concat(lines, "\n")) end
+            end
+
+            local optionRefs = {}
+            local currentWeapon = WEAPONS[1] or "Assault Rifle"
+
+            SkinsR:AddDropdown('WeaponSelect', {
+                Values = WEAPONS,
+                Default = currentWeapon,
+                Text = 'weapon',
+                Callback = function(value)
+                    currentWeapon = value
+                    local lib = ss.mods.CosmeticLibrary
+                    if not lib then return end
+                    local sk = ss.equipped[currentWeapon] and ss.equipped[currentWeapon].Skin
+                    local sd = sk and (lib.Cosmetics[sk.Name] and lib.Cosmetics[sk.Name].DisplayName or sk.Name) or "None"
+                    if optionRefs.SkinSelect then optionRefs.SkinSelect:SetValue(sd) end
+                    local wr = ss.equipped[currentWeapon] and ss.equipped[currentWeapon].Wrap
+                    local wd = wr and (lib.Cosmetics[wr.Name] and lib.Cosmetics[wr.Name].DisplayName or wr.Name) or "None"
+                    if optionRefs.WrapSelect then optionRefs.WrapSelect:SetValue(wd) end
+                    local ch = ss.equipped[currentWeapon] and ss.equipped[currentWeapon].Charm
+                    local cd = ch and (lib.Cosmetics[ch.Name] and lib.Cosmetics[ch.Name].DisplayName or ch.Name) or "None"
+                    if optionRefs.CharmSelect then optionRefs.CharmSelect:SetValue(cd) end
+                end
+            })
+
+            local skinDD = SkinsR:AddDropdown('SkinSelect', {
+                Values = skinList,
+                Default = "None",
+                Text = 'skin',
+                Callback = function(val)
+                    local key = keyFromDisplay(val, skinMap)
+                    if key then SC.scEquip(currentWeapon, "Skin", key) updateLoadout() end
+                end
+            })
+            optionRefs.SkinSelect = skinDD
+
+            local wrapDD = SkinsR:AddDropdown('WrapSelect', {
+                Values = wrapList,
+                Default = "None",
+                Text = 'wrap',
+                Callback = function(val)
+                    local key = keyFromDisplay(val, wrapMap)
+                    if key then SC.scEquip(currentWeapon, "Wrap", key) updateLoadout() end
+                end
+            })
+            optionRefs.WrapSelect = wrapDD
+
+            local charmDD = SkinsR:AddDropdown('CharmSelect', {
+                Values = charmList,
+                Default = "None",
+                Text = 'charm',
+                Callback = function(val)
+                    local key = keyFromDisplay(val, charmMap)
+                    if key then SC.scEquip(currentWeapon, "Charm", key) updateLoadout() end
+                end
+            })
+            optionRefs.CharmSelect = charmDD
+
+            SkinsR:AddDivider()
+            SkinsR:AddDropdown('DanceSelect', {
+                Values = danceList,
+                Default = "None",
+                Text = 'dance',
+                Callback = function(val)
+                    local key = keyFromDisplay(val, danceMap)
+                    if key then SC.scEquip(currentWeapon, "Dance", key) updateLoadout() end
+                end
+            })
+
+            SkinsR:AddDropdown('EmoteSelect', {
+                Values = emoteList,
+                Default = "None",
+                Text = 'emote',
+                Callback = function(val)
+                    local key = keyFromDisplay(val, emoteMap)
+                    if key then SC.scEquip(currentWeapon, "Emote", key) updateLoadout() end
+                end
+            })
+
+            SkinsL:AddDivider()
+            SkinsL:AddButton('save config', function() SC.scSave() Library:Notify('cosmetics config saved') end)
+            SkinsL:AddButton('load config', function() SC.scLoad() updateLoadout() Library:Notify('cosmetics config loaded') end)
+
+            task.delay(0.5, function() updateLoadout() end)
+        end
+
+        -- Lua tab UI
+        local luaVoidL = Tabs.Lua:AddLeftGroupbox('void')
+        luaVoidL:AddToggle('LuaVoidEn', { Text = 'enable void', Default = false, Callback = function(v) if v and not IsSafe() then Library:Notify('Unsafe environment - void disabled', 3) return end CFG.VOID_ENABLED = v; if v then startVoid() elseif luaVoidConn then luaVoidConn:Disconnect(); luaVoidConn = nil end end })
+        luaVoidL:AddDropdown('LuaVoidMeth', { Text = 'method', Default = "Quantum Tunneling", Values = {"Stable","Drift","Chaotic","Circle","Spiral","Lissajous","Perlin Noise","Gravity Well","Helix","Figure 8","Tornado","Quantum Tunneling"}, Callback = function(v) CFG.VOID_METHOD = v end })
+        luaVoidL:AddDropdown('LuaVoidByp', { Text = 'bypass', Default = 5, Values = {"None","Velocity","CFrame only","Hybrid","Physics Bypass","Extreme Networking"}, Callback = function(v) CFG.VOID_BYPASS_MODE = v end })
+        luaVoidL:AddSlider('LuaVoidDSpeed', { Text = 'drift speed', Default = 9, Min = 1, Max = 200, Rounding = 0, Callback = function(v) CFG.VOID_DRIFT_SPEED = v * 1e6 end })
+        luaVoidL:AddSlider('LuaVoidDChaos', { Text = 'drift chaos %', Default = 98, Min = 1, Max = 100, Rounding = 0, Callback = function(v) CFG.VOID_DRIFT_CHAOS = v * 0.01 end })
+        luaVoidL:AddSlider('LuaVoidAlt', { Text = 'altitude (b)', Default = 10, Min = 1, Max = 1000, Rounding = 0, Callback = function(v) CFG.VOID_Y_BASE = v * 1e9 end })
+        luaVoidL:AddSlider('LuaVoidLA', { Text = 'lissajous a', Default = 2, Min = 1, Max = 10, Rounding = 0, Callback = function(v) CFG.VOID_LISSAJOUS_A = v end })
+        luaVoidL:AddSlider('LuaVoidLB', { Text = 'lissajous b', Default = 3, Min = 1, Max = 10, Rounding = 0, Callback = function(v) CFG.VOID_LISSAJOUS_B = v end })
+
+        local luaDesyncR = Tabs.Lua:AddRightGroupbox('desync & evasion')
+        luaDesyncR:AddToggle('LuaDesync', { Text = 'enable desync', Default = true, Callback = function(v) CFG.DESYNC_ENABLED = v end })
+        luaDesyncR:AddSlider('LuaDesyncRate', { Text = 'desync rate (x0.01s)', Default = 18, Min = 1, Max = 100, Rounding = 0, Callback = function(v) CFG.DESYNC_TICK = v * 0.01 end })
+        luaDesyncR:AddSlider('LuaDesyncRad', { Text = 'desync radius', Default = 22, Min = 1, Max = 100, Rounding = 0, Callback = function(v) CFG.DESYNC_RADIUS = v end })
+        luaDesyncR:AddToggle('LuaDesyncOnly', { Text = 'desync standalone', Default = false, Callback = function(v) CFG.DESYNC_STANDALONE = v; toggleDesyncOnly(v) end })
+        luaDesyncR:AddDivider()
+        luaDesyncR:AddToggle('LuaEvade', { Text = 'dodge enemies', Default = true, Callback = function(v) CFG.VOID_EVADE = v end })
+        luaDesyncR:AddSlider('LuaEvadeRad', { Text = 'evade radius (b)', Default = 8, Min = 1, Max = 50, Rounding = 0, Callback = function(v) CFG.VOID_EVADE_RADIUS = v * 1e9 end })
+        luaDesyncR:AddSlider('LuaEvadeSpd', { Text = 'evade speed (b)', Default = 6, Min = 1, Max = 50, Rounding = 0, Callback = function(v) CFG.VOID_EVADE_SPEED = v * 1e9 end })
+
+        local luaOrbitL = Tabs.Lua:AddLeftGroupbox('orbit')
+        luaOrbitL:AddToggle('LuaOrbitEn', { Text = 'enable orbit', Default = false, Callback = function(v) CFG.ORBIT_ENABLED = v; if v then startOrbit() elseif luaOrbitConn then luaOrbitConn:Disconnect(); luaOrbitConn = nil; pcall(function() CAM.CameraType = Enum.CameraType.Custom end) end end })
+        luaOrbitL:AddDropdown('LuaOrbitMode', { Text = 'mode', Default = "Default", Values = {"Default","Helix","Figure 8","Tornado"}, Callback = function(v) CFG.ORBIT_MODE = v end })
+        luaOrbitL:AddSlider('LuaOrbitSpd', { Text = 'speed', Default = 5, Min = 1, Max = 50, Rounding = 0, Callback = function(v) CFG.ORBIT_SPEED = v end })
+        luaOrbitL:AddSlider('LuaOrbitStab', { Text = 'stability', Default = 100, Min = 10, Max = 100, Rounding = 0, Callback = function(v) CFG.ORBIT_STABILITY = v * 0.01 end })
+        luaOrbitL:AddSlider('LuaOrbitHeight', { Text = 'height offset', Default = 50, Min = 1, Max = 200, Rounding = 0, Callback = function(v) CFG.HEIGHT_OFFSET = v * 1000 end })
+        luaOrbitL:AddSlider('LuaOrbitRad', { Text = 'orbit radius (b)', Default = 5, Min = 1, Max = 50, Rounding = 0, Callback = function(v) CFG.MIN_RADIUS = v * 1e9; CFG.MAX_RADIUS = v * 1e9 * 2 end })
+
+        local luaAAR = Tabs.Lua:AddRightGroupbox('anti-aim')
+        luaAAR:AddToggle('LuaAAEn', { Text = 'enable anti-aim', Default = false, Callback = function(v) CFG.AA_ENABLED = v; if v then startAA() elseif luaAAConn then luaAAConn:Disconnect(); luaAAConn = nil end end })
+        luaAAR:AddDropdown('LuaAAPitch', { Text = 'pitch', Default = "None", Values = {"None","Down","Up","Flip"}, Callback = function(v) CFG.AA_PITCH = v end })
+        luaAAR:AddDropdown('LuaAAMode', { Text = 'mode', Default = "None", Values = {"None","Jitter","Sway","Spin"}, Callback = function(v) CFG.AA_MODE = v end })
+        luaAAR:AddSlider('LuaAARange', { Text = 'jitter range', Default = 45, Min = 1, Max = 180, Rounding = 0, Callback = function(v) CFG.AA_JITTER_RANGE = v end })
+        luaAAR:AddSlider('LuaAASpd', { Text = 'speed', Default = 15, Min = 1, Max = 100, Rounding = 0, Callback = function(v) CFG.AA_SPEED = v end })
+
+        local luaMiscL = Tabs.Lua:AddLeftGroupbox('movement')
+        luaMiscL:AddToggle('LuaSpeedEn', { Text = 'speed', Default = false, Callback = function(v) CFG.SPEED_ENABLED = v; applySpeed() end })
+        luaMiscL:AddSlider('LuaSpeedVal', { Text = 'walkspeed', Default = 65, Min = 16, Max = 200, Rounding = 0, Callback = function(v) CFG.WALK_SPEED = v; local h = hum(); if h and CFG.SPEED_ENABLED then h.WalkSpeed = v end end })
+        luaMiscL:AddToggle('LuaNoclipEn', { Text = 'noclip', Default = false, Callback = function(v) CFG.NOCLIP = v; toggleNoclip(v) end })
+        luaMiscL:AddToggle('LuaIJEn', { Text = 'inf jump', Default = false, Callback = function(v) CFG.INF_JUMP = v; toggleIJ(v) end })
+        luaMiscL:AddToggle('LuaGravEn', { Text = 'low gravity', Default = false, Callback = function(v) CFG.LOW_GRAVITY = v; WS.Gravity = v and CFG.GRAVITY_VAL or origGravity end })
+        luaMiscL:AddSlider('LuaGravVal', { Text = 'gravity', Default = 35, Min = 1, Max = 196, Rounding = 0, Callback = function(v) CFG.GRAVITY_VAL = v; if CFG.LOW_GRAVITY then WS.Gravity = v end end })
+
+        local luaMiscR = Tabs.Lua:AddRightGroupbox('extras')
+        luaMiscR:AddToggle('LuaRF', { Text = 'rapid fire', Default = false, Callback = function(v) toggleRF(v) end })
+        luaMiscR:AddToggle('LuaWH', { Text = 'remove warhorn cd', Default = false, Callback = function(v) toggleWH(v) end })
+        luaMiscR:AddToggle('LuaMB', { Text = 'magic bullet', Default = false, Callback = function(v) if v and not IsSafe() then Library:Notify('Unsafe environment - magic bullet disabled', 3) return end toggleMB(v) end })
+        luaMiscR:AddToggle('LuaStuds', { Text = 'show position', Default = false, Callback = function(v) toggleStuds(v) end })
+    end
+end
+
+-- Configs tab: replaces SaveManager:BuildConfigSection (dropdown didn't work on this executor)
+do
+    local ConfigListGroup = Tabs['UI Settings']:AddRightGroupbox('config files')
+    local configBtnRefs = {}
+    local function refreshConfigButtons()
+        for _, ref in ipairs(configBtnRefs) do
+            pcall(ref.Destroy, ref)
+        end
+        configBtnRefs = {}
+        local list = SaveManager:RefreshConfigList()
+        for _, name in ipairs(list) do
+            local outer = Library:Create("TextButton", {
+                BackgroundColor3 = Color3.new(0, 0, 0);
+                BorderColor3 = Color3.new(0, 0, 0);
+                Size = UDim2.new(1, -4, 0, 20);
+                Text = "";
+                AutoButtonColor = false;
+                ZIndex = 5;
+                Parent = ConfigListGroup.Container;
+            })
+            local inner = Library:Create("Frame", {
+                BackgroundColor3 = Library.MainColor;
+                BorderColor3 = Library.OutlineColor;
+                BorderMode = Enum.BorderMode.Inset;
+                Size = UDim2.new(1, 0, 1, 0);
+                ZIndex = 6;
+                Parent = outer;
+            })
+            Library:CreateLabel({
+                Size = UDim2.new(1, 0, 1, 0);
+                TextSize = 14;
+                Text = name;
+                ZIndex = 6;
+                Parent = inner;
+                RichText = true;
+            })
+            Library:Create("UIGradient", {
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1));
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(212, 212, 212));
+                });
+                Rotation = 90;
+                Parent = inner;
+            })
+            Library:AddToRegistry(outer, { BorderColor3 = "Black" })
+            Library:AddToRegistry(inner, { BackgroundColor3 = "MainColor"; BorderColor3 = "OutlineColor" })
+            Library:OnHighlight(outer, outer,
+                { BorderColor3 = "AccentColor" },
+                { BorderColor3 = "Black" }
+            )
+            outer.MouseButton1Click:Connect(function()
+                Options.SaveManager_ConfigName:SetValue(name)
+            end)
+            table.insert(configBtnRefs, outer)
+        end
+    end
+    local function nameOrWarn()
+        local n = Options.SaveManager_ConfigName.Value
+        if not n or n:gsub(' ', '') == '' then
+            Library:Notify('enter a config name above', 2)
+            return nil
+        end
+        return n
+    end
+    ConfigListGroup:AddButton('refresh list', refreshConfigButtons)
+    local ConfigManageGroup = Tabs['UI Settings']:AddRightGroupbox('manage')
+    ConfigManageGroup:AddInput('SaveManager_ConfigName', { Text = 'config name' })
+    ConfigManageGroup:AddButton('load config', function()
+        local name = nameOrWarn() if not name then return end
+        local ok, err = SaveManager:Load(name)
+        if not getgenv().InstanceSilentLoad then
+            if ok then
+                Library:Notify(string.format('Loaded config %q', name))
+            else
+                Library:Notify('Failed to load config: ' .. tostring(err))
+            end
+        end
+    end)
+    ConfigManageGroup:AddButton('create config', function()
+        local name = Options.SaveManager_ConfigName.Value
+        if name:gsub(' ', '') == '' then
+            Library:Notify('invalid name', 2)
+            return
+        end
+        local ok, err = SaveManager:Save(name)
+        if ok then
+            Library:Notify(string.format('created config %q', name))
+            refreshConfigButtons()
+        else
+            Library:Notify('failed: ' .. tostring(err))
+        end
+    end)
+    ConfigManageGroup:AddDivider()
+    ConfigManageGroup:AddButton('overwrite config', function()
+        local name = nameOrWarn() if not name then return end
+        local ok, err = SaveManager:Save(name)
+        if ok then Library:Notify(string.format('overwrote %q', name))
+        else Library:Notify('failed: ' .. tostring(err)) end
+    end)
+    ConfigManageGroup:AddButton('delete config', function()
+        local name = nameOrWarn() if not name then return end
+        local ok, err = SaveManager:Delete(name)
+        if ok then Library:Notify(string.format('deleted %q', name)); refreshConfigButtons()
+        else Library:Notify('failed: ' .. tostring(err)) end
+    end)
+    ConfigManageGroup:AddDivider()
+    ConfigManageGroup:AddButton('set as autoload', function()
+        local name = nameOrWarn() if not name then return end
+        local ok, err = SaveManager:SaveAutoloadConfig(name)
+        if ok then Library:Notify(string.format('set %q to auto load', name))
+        else Library:Notify('failed: ' .. tostring(err)) end
+    end)
+    ConfigManageGroup:AddButton('reset autoload', function()
+        SaveManager:DeleteAutoLoadConfig()
+        Library:Notify('autoload reset')
+    end)
+    ConfigManageGroup:AddLabel("autoload: " .. SaveManager:GetAutoloadConfig(), true)
+    ConfigManageGroup:AddDivider()
+    ConfigManageGroup:AddToggle('AutoLoadToggle', {
+        Text = 'autoload',
+        Default = false,
+        Callback = function(val)
+            getgenv().InstanceAutoloadEnabled = val
+            pcall(function()
+                if val then
+                    if not isfolder("onyx") then makefolder("onyx") end
+                    if not isfolder("autoexec") then pcall(makefolder, "autoexec") end
+                    local src = ""
+                    pcall(function()
+                        local s = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("MenuLib") or game:GetService("CoreGui"):FindFirstChild("MenuLib")
+                        if s then src = s:GetAttribute("ScriptSource") or "" end
+                    end)
+                    writefile("onyx/autoload.txt", "true")
+                    local function writeLoader(loaderPath, scriptPath)
+                        writefile(loaderPath, 'task.spawn(function()\nrepeat task.wait() until game:IsLoaded()\ntask.wait(1)\nif isfile("' .. scriptPath .. '") then\nloadstring(readfile("' .. scriptPath .. '"))()\nend\nend)')
+                    end
+                    writeLoader("autoexec/onyxloader.lua", "onyx/onyxnew.txt")
+                    pcall(function()
+                        local ok, content = pcall(function()
+                            local dbg = debug.getinfo(1)
+                            if dbg and dbg.source then
+                                local srcPath = dbg.source:match("^@(.+)$")
+                                if srcPath and isfile(srcPath) then
+                                    return readfile(srcPath)
+                                end
+                            end
+                        end)
+                        if ok and content and #content > 100 then
+                            writefile("onyx/onyxnew.txt", content)
+                        end
+                    end)
+                else
+                    writefile("onyx/autoload.txt", "false")
+                    pcall(delfile, "autoexec/onyxloader.lua")
+                end
+            end)
+        end
+    })
+    ConfigManageGroup:AddToggle('SilentLoadToggle', {
+        Text = 'silent load',
+        Default = _silentLoadFlag,
+        Callback = function(val)
+            getgenv().InstanceSilentLoad = val
+            pcall(function()
+                if val then
+                    if not isfolder("onyx") then makefolder("onyx") end
+                    writefile("onyx/silentload.txt", "true")
+                else
+                    writefile("onyx/silentload.txt", "false")
+                    if Window and Window.Holder then
+                        Window.Holder.Visible = true
+                    end
+                end
+            end)
+        end
+    })
+    ConfigManageGroup:AddDivider()
+    local autosaveConn = nil
+    ConfigManageGroup:AddToggle('AutoSaveToggle', {
+        Text = 'autosave',
+        Default = false,
+        Callback = function(val)
+            if val then
+                if not autosaveConn then
+                    autosaveConn = task.spawn(function()
+                        while Toggles and Toggles.AutoSaveToggle and Toggles.AutoSaveToggle.Value do
+                            task.wait(60)
+                            if Toggles and Toggles.AutoSaveToggle and Toggles.AutoSaveToggle.Value then
+                                pcall(function() SaveManager:Save('autosave') end)
+                            end
+                        end
+                        autosaveConn = nil
+                    end)
+                end
+            else
+                autosaveConn = nil
+            end
+        end
+    })
+    ConfigManageGroup:AddButton('reset autosave', function()
+        local ok, err = SaveManager:Delete('autosave')
+        if ok then
+            Library:Notify('autosave cleared')
+        else
+            Library:Notify('failed: ' .. tostring(err))
+        end
+    end)
+    refreshConfigButtons()
+end
+
+end)()
 
 getgenv().InstanceConfigLoading = true
 applyInstanceAccentTheme()
@@ -22411,4 +19569,5 @@ task.defer(function()
     pcall(applyInstanceAccentTheme)
     getgenv().InstanceConfigLoading = false
 end)
-end)()
+local function _init() end
+_init()
